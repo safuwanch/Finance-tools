@@ -3,167 +3,92 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Finance Automation Portal</title>
-    <style>
-        :root {
-            --bg-color: #f8fafc;
-            --card-bg: #ffffff;
-            --text-main: #0f172a;
-            --text-muted: #475569;
-            --primary: #2563eb;
-            --primary-hover: #1d4ed8;
-            --border-color: #e2e8f0;
-        }
-
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-        }
-
-        body {
-            background-color: var(--bg-color);
-            color: var(--text-main);
-            line-height: 1.6;
-            padding: 2rem 1rem;
-        }
-
-        .container {
-            max-width: 1100px;
-            margin: 0 auto;
-        }
-
-        header {
-            margin-bottom: 3rem;
-            border-bottom: 2px solid var(--border-color);
-            padding-bottom: 1.5rem;
-        }
-
-        h1 {
-            font-size: 2.25rem;
-            font-weight: 700;
-            color: var(--text-main);
-            letter-spacing: -0.05em;
-        }
-
-        .subtitle {
-            color: var(--text-muted);
-            font-size: 1.1rem;
-            margin-top: 0.5rem;
-        }
-
-        .dashboard-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-            gap: 1.5rem;
-            margin-bottom: 3rem;
-        }
-
-        .card {
-            background: var(--card-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 12px;
-            padding: 1.75rem;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
-        }
-
-        .card:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px Gren 6px -4px rgba(0, 0, 0, 0.05);
-        }
-
-        .card-content h2 {
-            font-size: 1.25rem;
-            font-weight: 600;
-            margin-bottom: 0.75rem;
-            color: var(--text-main);
-        }
-
-        .card-content p {
-            font-size: 0.925rem;
-            color: var(--text-muted);
-            margin-bottom: 1.5rem;
-        }
-
-        .btn {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            padding: 0.625rem 1.2rem;
-            font-size: 0.9rem;
-            font-weight: 500;
-            text-decoration: none;
-            border-radius: 6px;
-            background-color: var(--primary);
-            color: white;
-            transition: background-color 0.15s ease;
-        }
-
-        .btn:hover {
-            background-color: var(--primary-hover);
-        }
-
-        footer {
-            text-align: center;
-            font-size: 0.85rem;
-            color: var(--text-muted);
-            margin-top: auto;
-        }
-    </style>
+    <title>Finance Tools Directory</title>
+    <!-- Using Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body>
+<body class="bg-slate-50 text-slate-800 font-sans antialiased min-h-screen p-6 md:p-12">
 
-    <div class="container">
-        <header>
-            <h1>Financial Automation Hub</h1>
-            <p class="subtitle">Select a utility tool below to optimize, process, or reconcile your financial workflows.</p>
+    <div class="max-w-6xl mx-auto">
+        
+        <!-- Header Section -->
+        <header class="text-center mb-10">
+            <div class="inline-flex items-center justify-center p-3 bg-blue-100 rounded-2xl mb-4">
+                <svg class="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+                </svg>
+            </div>
+            <h1 class="text-3xl font-bold text-slate-900 tracking-tight">Finance Tools Workspace</h1>
+            <p class="text-slate-500 mt-2 max-w-lg mx-auto">Select a utility module below to begin. New automation tools will be added here as they are developed.</p>
         </header>
 
-        <main>
-            <div class="dashboard-grid">
-                
-                <div class="card">
-                    <div class="card-content">
-                        <h2>TDS Tally Helper</h2>
-                        <p>Streamline TDS compliance and calculation validations using raw Tally data inputs.</p>
-                    </div>
-                    <a href="TDSTallyTool.html" class="btn">Launch Tool</a>
+        <!-- Grid Navigation (The "Squares") -->
+        <main class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
+            
+            <!-- Tool 1: TDS Helper -->
+            <a href="TDSTallyTool.html" class="group aspect-square bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-xl hover:border-blue-400 hover:-translate-y-1 flex flex-col items-center justify-center p-6 text-center transition-all duration-300 relative overflow-hidden">
+                <div class="absolute inset-0 bg-gradient-to-b from-transparent to-blue-50/50 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                <!-- Icon -->
+                <div class="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-4 group-hover:bg-blue-100 group-hover:scale-110 transition-all duration-300 relative z-10">
+                    <svg class="w-8 h-8 text-slate-600 group-hover:text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
+                    </svg>
                 </div>
+                <h2 class="text-sm md:text-base font-semibold text-slate-900 relative z-10 group-hover:text-blue-700">TDS Tally Helper</h2>
+                <p class="text-xs text-slate-500 mt-2 line-clamp-2 relative z-10">TDS working helper from Tally input data</p>
+            </a>
 
-                <div class="card">
-                    <div class="card-content">
-                        <h2>Uber PT Flowchart</h2>
-                        <p>Convert Uber Partner/Payout data structures into clear, logical cash flow charts.</p>
-                    </div>
-                    <a href="uberFlow.html" class="btn">Launch Tool</a>
+            <!-- Tool 2: Uber Flowchart -->
+            <a href="uberFlow.html" class="group aspect-square bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-xl hover:border-indigo-400 hover:-translate-y-1 flex flex-col items-center justify-center p-6 text-center transition-all duration-300 relative overflow-hidden">
+                <div class="absolute inset-0 bg-gradient-to-b from-transparent to-indigo-50/50 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                <!-- Icon -->
+                <div class="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-4 group-hover:bg-indigo-100 group-hover:scale-110 transition-all duration-300 relative z-10">
+                    <svg class="w-8 h-8 text-slate-600 group-hover:text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path>
+                    </svg>
                 </div>
+                <h2 class="text-sm md:text-base font-semibold text-slate-900 relative z-10 group-hover:text-indigo-700">Uber Flowchart</h2>
+                <p class="text-xs text-slate-500 mt-2 line-clamp-2 relative z-10">Uber PT to flow chart visualizer</p>
+            </a>
 
-                <div class="card">
-                    <div class="card-content">
-                        <h2>Tally Columnar Extractor</h2>
-                        <p>Generate precise invoice records from Tally Columnar reports using GST ledgers.</p>
-                    </div>
-                    <a href="InvoiceFromTallyColumnar.html" class="btn">Launch Tool</a>
+            <!-- Tool 3: Tally Invoice -->
+            <a href="InvoiceFromTallyColumnar.html" class="group aspect-square bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-xl hover:border-emerald-400 hover:-translate-y-1 flex flex-col items-center justify-center p-6 text-center transition-all duration-300 relative overflow-hidden">
+                <div class="absolute inset-0 bg-gradient-to-b from-transparent to-emerald-50/50 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                <!-- Icon -->
+                <div class="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-4 group-hover:bg-emerald-100 group-hover:scale-110 transition-all duration-300 relative z-10">
+                    <svg class="w-8 h-8 text-slate-600 group-hover:text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                    </svg>
                 </div>
+                <h2 class="text-sm md:text-base font-semibold text-slate-900 relative z-10 group-hover:text-emerald-700">Tally Invoice</h2>
+                <p class="text-xs text-slate-500 mt-2 line-clamp-2 relative z-10">Invoice generation from Tally columnar GST ledgers</p>
+            </a>
 
-                <div class="card">
-                    <div class="card-content">
-                        <h2>Reconciliation Engine</h2>
-                        <p>Execute automated data matching, cross-referencing, and discrepancy reporting.</p>
-                    </div>
-                    <a href="recon.html" class="btn">Launch Tool</a>
+            <!-- Tool 4: Recon Engine -->
+            <a href="recon.html" class="group aspect-square bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-xl hover:border-purple-400 hover:-translate-y-1 flex flex-col items-center justify-center p-6 text-center transition-all duration-300 relative overflow-hidden">
+                <div class="absolute inset-0 bg-gradient-to-b from-transparent to-purple-50/50 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                <!-- Icon -->
+                <div class="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-4 group-hover:bg-purple-100 group-hover:scale-110 transition-all duration-300 relative z-10">
+                    <svg class="w-8 h-8 text-slate-600 group-hover:text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                    </svg>
                 </div>
+                <h2 class="text-sm md:text-base font-semibold text-slate-900 relative z-10 group-hover:text-purple-700">Recon Engine</h2>
+                <p class="text-xs text-slate-500 mt-2 line-clamp-2 relative z-10">Automated financial reconciliation utility</p>
+            </a>
 
+            <!-- Placeholder for Future Tools -->
+            <div class="group aspect-square bg-slate-50/50 rounded-2xl border-2 border-dashed border-slate-200 hover:border-slate-300 flex flex-col items-center justify-center p-6 text-center transition-all duration-300 cursor-not-allowed">
+                <div class="w-14 h-14 rounded-full flex items-center justify-center mb-3 group-hover:scale-110 transition-all duration-300">
+                    <svg class="w-8 h-8 text-slate-300 group-hover:text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                    </svg>
+                </div>
+                <h2 class="text-sm font-medium text-slate-400">Future Tool Slot</h2>
+                <p class="text-xs text-slate-400 mt-1">Available soon</p>
             </div>
-        </main>
 
-        <footer>
-            <p> All tools built for internal efficiency.</p>
-        </footer>
+        </main>
     </div>
 
 </body>
