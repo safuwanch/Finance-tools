@@ -1,0 +1,1142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TDS Compliance Auditor</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body { background-color: #f8fafc; color: #0f172a; font-family: 'Inter', sans-serif; overflow: hidden; }
+        .font-mono-custom { font-family: 'JetBrains Mono', monospace; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        .spinner { border: 3px solid rgba(79,70,229,0.1); border-top-color: #4f46e5; border-radius: 50%; width: 32px; height: 32px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .hidden-panel { display: none !important; }
+        select.section-select { appearance: none; background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e"); background-repeat: no-repeat; background-position: right 0.5rem center; background-size: 1em; padding-right: 2rem; }
+        .sub-tab-btn { padding: 0.5rem 1rem; font-size: 0.8125rem; font-weight: 600; border-radius: 0.5rem; border: 1px solid transparent; transition: all 0.15s; cursor: pointer; }
+        .sub-tab-btn.active { background: #4f46e5; color: white; border-color: #4338ca; box-shadow: 0 1px 3px rgba(79,70,229,0.25); }
+        .sub-tab-btn.inactive { background: white; color: #64748b; border-color: #e2e8f0; }
+        .sub-tab-btn.inactive:hover { background: #f1f5f9; color: #334155; }
+        .deleted-row { opacity: 0.5; background: #fef2f2 !important; }
+        .deleted-row td { text-decoration: line-through; color: #94a3b8 !important; }
+        tr.deleted-row:hover { opacity: 0.6; }
+        /* Modal */
+        #modal-overlay { position: fixed; inset: 0; background: rgba(15,23,42,0.5); z-index: 999; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(3px); }
+        #modal-overlay.hidden-panel { display: none !important; }
+        #delete-confirm-modal { background: white; border-radius: 1rem; padding: 2rem; width: 420px; max-width: 90vw; box-shadow: 0 20px 60px rgba(0,0,0,0.2); }
+        /* Export dialog */
+        #export-modal { position: fixed; inset: 0; background: rgba(15,23,42,0.5); z-index: 999; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(3px); }
+        #export-modal.hidden-panel { display: none !important; }
+    </style>
+</head>
+<body class="flex h-screen w-full antialiased">
+
+<!-- Delete Confirm Modal -->
+<div id="modal-overlay" class="hidden-panel">
+    <div id="delete-confirm-modal">
+        <div class="flex items-center gap-3 mb-4">
+            <div class="w-10 h-10 bg-rose-100 rounded-full flex items-center justify-center flex-shrink-0">
+                <i data-lucide="trash-2" class="w-5 h-5 text-rose-600"></i>
+            </div>
+            <div>
+                <h3 class="text-base font-bold text-slate-900">Delete Entry</h3>
+                <p class="text-sm text-slate-500">This entry will be flagged as deleted (not removed).</p>
+            </div>
+        </div>
+        <div id="modal-entry-info" class="mb-4 p-3 bg-slate-50 rounded-lg border border-slate-200 text-sm text-slate-700"></div>
+        <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Deletion Remark <span class="text-rose-500">*</span></label>
+        <textarea id="delete-remark-input" rows="3" placeholder="Enter reason for deletion (e.g. Duplicate entry, Data correction...)" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none resize-none mb-1"></textarea>
+        <p id="delete-remark-err" class="text-xs text-rose-500 hidden-panel mb-3">Remark is required to proceed.</p>
+        <div class="flex gap-3 mt-4">
+            <button onclick="cancelDelete()" class="flex-1 px-4 py-2 bg-white border border-slate-200 text-slate-700 font-medium rounded-lg hover:bg-slate-50 transition-colors text-sm">Cancel</button>
+            <button onclick="confirmDelete()" class="flex-1 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-medium rounded-lg transition-colors text-sm flex items-center justify-center gap-2">
+                <i data-lucide="trash-2" class="w-4 h-4"></i> Confirm Delete
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Export Options Modal -->
+<div id="export-modal" class="hidden-panel">
+    <div style="background:white;border-radius:1rem;padding:2rem;width:380px;max-width:90vw;box-shadow:0 20px 60px rgba(0,0,0,0.2);">
+        <div class="flex items-center gap-3 mb-5">
+            <div class="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center flex-shrink-0">
+                <i data-lucide="download" class="w-5 h-5 text-indigo-600"></i>
+            </div>
+            <div>
+                <h3 class="text-base font-bold text-slate-900">Export Excel Report</h3>
+                <p class="text-sm text-slate-500">Choose export options below.</p>
+            </div>
+        </div>
+        <div class="space-y-3 mb-5">
+            <label class="flex items-center gap-3 p-3 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-50 transition-colors">
+                <input type="checkbox" id="export-include-deleted" class="w-4 h-4 rounded accent-indigo-600" />
+                <div>
+                    <div class="text-sm font-semibold text-slate-800">Include Deleted Entries</div>
+                    <div class="text-xs text-slate-500">Deleted rows will be highlighted in red with deletion remarks</div>
+                </div>
+            </label>
+        </div>
+        <div class="flex gap-3">
+            <button onclick="closeExportModal()" class="flex-1 px-4 py-2 bg-white border border-slate-200 text-slate-700 font-medium rounded-lg hover:bg-slate-50 transition-colors text-sm">Cancel</button>
+            <button onclick="doExport()" class="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors text-sm flex items-center justify-center gap-2">
+                <i data-lucide="file-spreadsheet" class="w-4 h-4"></i> Export
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Sidebar -->
+<aside class="w-64 bg-white border-r border-slate-200 flex flex-col relative z-20 shadow-sm">
+    <div class="p-6">
+        <h1 class="text-xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
+            <i data-lucide="database" class="text-indigo-600 w-6 h-6"></i> TDS Auditor
+        </h1>
+        <p class="text-[10px] text-slate-500 mt-1 uppercase tracking-widest font-semibold">Compliance Engine v3</p>
+    </div>
+    <nav class="flex-1 px-4 space-y-1.5 mt-2" id="nav-menu">
+        <button onclick="switchTab('ingestion')" id="nav-ingestion" class="w-full flex items-center justify-between px-3 py-2.5 rounded-lg transition-all duration-200 text-slate-500 hover:bg-slate-100 hover:text-slate-900 border border-transparent">
+            <div class="flex items-center gap-3"><i data-lucide="file-spreadsheet" class="w-4 h-4 nav-icon"></i><span class="text-sm font-medium">Data Ingestion</span></div>
+            <i data-lucide="chevron-right" class="w-4 h-4 opacity-50 nav-chevron hidden"></i>
+        </button>
+        <button onclick="switchTab('audit')" id="nav-audit" class="w-full flex items-center justify-between px-3 py-2.5 rounded-lg transition-all duration-200 text-slate-500 hover:bg-slate-100 hover:text-slate-900 border border-transparent">
+            <div class="flex items-center gap-3"><i data-lucide="shield-alert" class="w-4 h-4 nav-icon"></i><span class="text-sm font-medium">Audit Results</span></div>
+            <i data-lucide="chevron-right" class="w-4 h-4 opacity-50 nav-chevron hidden"></i>
+        </button>
+        <button onclick="switchTab('comparison')" id="nav-comparison" class="w-full flex items-center justify-between px-3 py-2.5 rounded-lg transition-all duration-200 text-slate-500 hover:bg-slate-100 hover:text-slate-900 border border-transparent">
+            <div class="flex items-center gap-3"><i data-lucide="git-compare" class="w-4 h-4 nav-icon"></i><span class="text-sm font-medium">Month Comparison</span></div>
+            <i data-lucide="chevron-right" class="w-4 h-4 opacity-50 nav-chevron hidden"></i>
+        </button>
+        <button onclick="switchTab('config')" id="nav-config" class="w-full flex items-center justify-between px-3 py-2.5 rounded-lg transition-all duration-200 text-slate-500 hover:bg-slate-100 hover:text-slate-900 border border-transparent">
+            <div class="flex items-center gap-3"><i data-lucide="settings" class="w-4 h-4 nav-icon"></i><span class="text-sm font-medium">Exclusion Config</span></div>
+            <i data-lucide="chevron-right" class="w-4 h-4 opacity-50 nav-chevron hidden"></i>
+        </button>
+    </nav>
+    <div class="p-4 m-4 bg-slate-50 rounded-xl border border-slate-200 shadow-sm">
+        <div class="text-[11px] font-semibold text-slate-500 mb-2 uppercase tracking-wide">System Status</div>
+        <div class="flex items-center gap-2 text-sm text-emerald-600 font-medium">
+            <div class="relative flex h-2.5 w-2.5">
+                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+            </div>
+            Engine Active
+        </div>
+    </div>
+</aside>
+
+<!-- Main Content -->
+<main class="flex-1 flex flex-col relative z-10 bg-slate-50/50">
+    <header class="h-16 border-b border-slate-200 bg-white/80 backdrop-blur-md flex items-center justify-between px-8 flex-shrink-0 z-20 shadow-sm">
+        <div class="flex items-center text-sm font-medium text-slate-500">
+            Workspace <i data-lucide="chevron-right" class="w-3.5 h-3.5 mx-2 opacity-40"></i>
+            <span class="text-indigo-600 font-semibold" id="header-title">Compliance Evaluation</span>
+        </div>
+        <div class="flex items-center gap-4 text-sm font-mono-custom text-slate-500">
+            <span class="bg-slate-100 px-3 py-1 rounded-md border border-slate-200">Rows: <span id="stat-rows" class="font-semibold text-slate-900">0</span></span>
+            <span class="bg-rose-50 px-3 py-1 rounded-md border border-rose-100 text-rose-600">Errors: <span id="stat-errors" class="font-semibold">0</span></span>
+        </div>
+    </header>
+
+    <div class="flex-1 p-8 overflow-hidden flex flex-col relative">
+
+        <!-- ═══ INGESTION TAB ═══ -->
+        <div id="panel-ingestion" class="flex flex-col h-full space-y-4 hidden-panel">
+            <div class="flex items-end justify-between">
+                <div>
+                    <h2 class="text-2xl font-bold text-slate-900 tracking-tight">Data Ingestion</h2>
+                    <p class="text-sm text-slate-500 mt-1">Paste Tally Detailed Ledger export data below.</p>
+                </div>
+                <button id="clear-ingestion-btn" onclick="clearIngestionData()" class="hidden-panel flex items-center gap-2 px-3 py-2 bg-white border border-rose-200 text-rose-600 hover:bg-rose-50 font-medium rounded-lg text-sm transition-colors shadow-sm">
+                    <i data-lucide="trash-2" class="w-4 h-4"></i> Clear Data
+                </button>
+            </div>
+            <div class="relative flex-1 rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden flex flex-col transition-all focus-within:border-indigo-400 focus-within:ring-4 focus-within:ring-indigo-500/10">
+                <textarea id="ingestion-textarea" class="absolute inset-0 w-full h-full opacity-0 z-20 cursor-text resize-none" placeholder="Click here and press Ctrl+V to paste Tally Data..." oninput="handlePasteCurrent(event)"></textarea>
+                <div id="ingestion-empty-state" class="absolute inset-0 flex flex-col items-center justify-center text-slate-400 z-10 pointer-events-none bg-slate-50/50">
+                    <div class="w-16 h-16 bg-white rounded-2xl shadow-sm border border-slate-200 flex items-center justify-center mb-4">
+                        <i data-lucide="clipboard-paste" class="w-8 h-8 text-indigo-500"></i>
+                    </div>
+                    <p class="font-semibold text-lg text-slate-700">Click & Paste (Ctrl+V)</p>
+                    <p class="text-sm mt-2">Expects Tally Detailed Ledger format</p>
+                </div>
+                <div id="ingestion-preview" class="z-10 w-full h-full relative hidden-panel flex flex-col">
+                    <div class="p-3 bg-emerald-50 border-b border-emerald-100 flex items-center justify-between gap-2 text-emerald-700">
+                        <div class="flex items-center gap-2">
+                            <i data-lucide="check-circle-2" class="w-4 h-4"></i>
+                            <span class="text-sm font-medium" id="ingestion-success-msg">Data successfully ingested and parsed in memory.</span>
+                        </div>
+                        <button onclick="switchTab('audit')" class="text-xs font-semibold bg-emerald-100 hover:bg-emerald-200 text-emerald-800 px-3 py-1 rounded-full flex items-center gap-1.5 transition-colors">
+                            View Audit Results <i data-lucide="arrow-right" class="w-3 h-3"></i>
+                        </button>
+                    </div>
+                    <textarea id="ingestion-preview-text" class="flex-1 w-full p-4 text-xs font-mono-custom text-slate-600 bg-white resize-none outline-none" readonly></textarea>
+                </div>
+            </div>
+        </div>
+
+        <!-- ═══ AUDIT TAB ═══ -->
+        <div id="panel-audit" class="flex flex-col h-full space-y-4 hidden-panel">
+            <div class="flex justify-between items-end">
+                <div>
+                    <h2 class="text-2xl font-bold text-slate-900 tracking-tight">Audit Results</h2>
+                    <p class="text-sm text-slate-500 mt-1">Compliance evaluation (<span id="audit-count">0</span> records, <span id="audit-deleted-count" class="text-rose-500">0</span> deleted)</p>
+                </div>
+                <div class="flex gap-3 items-center">
+                    <div class="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm">
+                        <label class="text-xs font-medium text-slate-500">Tolerance (₹)</label>
+                        <input type="number" id="variance-tolerance" value="1.00" step="0.5" onchange="computeAuditResults()" class="w-16 text-right text-sm font-mono-custom text-slate-900 focus:outline-none border-b border-slate-300 focus:border-indigo-500" />
+                    </div>
+                    <button onclick="openExportModal()" id="export-btn" class="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-95">
+                        <i data-lucide="download" class="w-4 h-4"></i>
+                        <span id="export-text">Export Excel</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="flex-1 bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col">
+                <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex gap-3 items-center flex-wrap">
+                    <div class="relative flex-1 min-w-[200px] max-w-sm">
+                        <i data-lucide="search" class="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4"></i>
+                        <input type="text" id="audit-search" oninput="renderAuditResults()" placeholder="Search Party, Section, or Voucher..." class="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 shadow-sm transition-all" />
+                    </div>
+                    <select id="audit-status-filter" onchange="renderAuditResults()" class="px-3.5 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:border-indigo-500 cursor-pointer shadow-sm font-medium">
+                        <option value="All">All Statuses</option>
+                        <option value="Correct">Correct</option>
+                        <option value="Mismatch">Mismatch</option>
+                        <option value="Missed">Missed</option>
+                        <option value="Missing Base">Missing Base</option>
+                        <option value="Corrected">Corrected</option>
+                    </select>
+                    <label class="flex items-center gap-2 text-sm text-slate-600 cursor-pointer select-none">
+                        <input type="checkbox" id="show-deleted-toggle" onchange="renderAuditResults()" class="w-4 h-4 rounded accent-indigo-600" />
+                        Show Deleted
+                    </label>
+                </div>
+                <div class="flex-1 overflow-auto relative">
+                    <table class="w-full text-left text-sm whitespace-nowrap">
+                        <thead class="sticky top-0 bg-white/95 backdrop-blur-sm text-slate-500 z-10 border-b border-slate-200 shadow-sm">
+                            <tr>
+                                <th class="px-4 py-3.5 font-semibold">Party Name</th>
+                                <th class="px-4 py-3.5 font-semibold">Vch No</th>
+                                <th class="px-4 py-3.5 font-semibold">Section Applied</th>
+                                <th class="px-4 py-3.5 font-semibold text-right">Net Base</th>
+                                <th class="px-4 py-3.5 font-semibold text-right">Expected TDS</th>
+                                <th class="px-4 py-3.5 font-semibold text-right">Actual TDS</th>
+                                <th class="px-4 py-3.5 font-semibold text-right">Diff</th>
+                                <th class="px-4 py-3.5 font-semibold text-center">Status</th>
+                                <th class="px-4 py-3.5 font-semibold text-center w-12"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="audit-tbody" class="divide-y divide-slate-100"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ═══ COMPARISON TAB ═══ -->
+        <div id="panel-comparison" class="flex flex-col h-full space-y-4 hidden-panel">
+            <div class="flex items-end justify-between">
+                <div>
+                    <h2 class="text-2xl font-bold text-slate-900 tracking-tight">Month-on-Month Comparison</h2>
+                    <p class="text-sm text-slate-500 mt-1">Analyze variances between Current and Previous month datasets.</p>
+                </div>
+                <!-- Sub-tab switcher -->
+                <div class="flex gap-2 bg-slate-100 p-1 rounded-lg">
+                    <button id="subtab-btn-input" onclick="switchComparisonSubTab('input')" class="sub-tab-btn active flex items-center gap-1.5">
+                        <i data-lucide="upload" class="w-3.5 h-3.5"></i> Input
+                    </button>
+                    <button id="subtab-btn-results" onclick="switchComparisonSubTab('results')" class="sub-tab-btn inactive flex items-center gap-1.5">
+                        <i data-lucide="bar-chart-2" class="w-3.5 h-3.5"></i> Results
+                    </button>
+                </div>
+            </div>
+
+            <!-- Comparison: Input sub-panel -->
+            <div id="comparison-input-panel" class="flex-1 flex flex-col space-y-4">
+                <div class="grid grid-cols-2 gap-5 flex-1">
+                    <!-- Previous Month -->
+                    <div class="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-sm flex flex-col relative transition-all focus-within:border-indigo-400 focus-within:ring-4 focus-within:ring-indigo-500/10">
+                        <div class="px-4 py-2.5 bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-600 uppercase tracking-wider flex justify-between items-center">
+                            <div class="flex items-center gap-2"><i data-lucide="history" class="w-3.5 h-3.5 text-slate-400"></i> Previous Month Data</div>
+                            <div class="flex items-center gap-2">
+                                <span id="prev-month-count" class="bg-slate-200 px-2 py-0.5 rounded text-slate-700">0 rows</span>
+                                <button id="clear-prev-btn" onclick="clearPreviousData()" class="hidden-panel text-rose-400 hover:text-rose-600 transition-colors" title="Clear previous month data">
+                                    <i data-lucide="x-circle" class="w-4 h-4"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <textarea id="comparison-prev-textarea" class="flex-1 w-full bg-transparent resize-none p-4 text-xs font-mono-custom text-slate-600 focus:outline-none placeholder-slate-400" oninput="handlePastePrevious(event)" placeholder="Paste previous month Tally ledger data here..."></textarea>
+                    </div>
+                    <!-- Current Month (readonly mirror) -->
+                    <div class="border border-slate-200 rounded-xl overflow-hidden bg-slate-50 shadow-sm flex flex-col relative">
+                        <div class="px-4 py-2.5 bg-slate-100 border-b border-slate-200 text-xs font-bold text-slate-600 uppercase tracking-wider flex justify-between items-center">
+                            <div class="flex items-center gap-2"><i data-lucide="file-spreadsheet" class="w-3.5 h-3.5 text-slate-400"></i> Current Month Data</div>
+                            <span id="curr-month-count" class="bg-slate-200 px-2 py-0.5 rounded text-slate-700">0 rows</span>
+                        </div>
+                        <div id="comparison-curr-empty" class="flex-1 flex flex-col items-center justify-center text-slate-400 text-center p-6">
+                            <i data-lucide="arrow-left" class="w-8 h-8 mb-3 text-slate-300"></i>
+                            <p class="text-sm font-medium text-slate-500">Current month data from Ingestion</p>
+                            <p class="text-xs mt-1 text-slate-400">Go to <button onclick="switchTab('ingestion')" class="underline text-indigo-500 hover:text-indigo-700">Data Ingestion</button> to load current month</p>
+                        </div>
+                        <textarea id="comparison-curr-textarea" class="hidden-panel flex-1 w-full bg-transparent resize-none p-4 text-xs font-mono-custom text-slate-500 outline-none" readonly></textarea>
+                    </div>
+                </div>
+                <div class="flex justify-center">
+                    <button onclick="switchComparisonSubTab('results')" class="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg shadow-sm transition-all active:scale-95 text-sm">
+                        <i data-lucide="bar-chart-2" class="w-4 h-4"></i> View Comparison Results
+                    </button>
+                </div>
+            </div>
+
+            <!-- Comparison: Results sub-panel -->
+            <div id="comparison-results-panel" class="hidden-panel flex-1 bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col">
+                <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap gap-3 items-center justify-between">
+                    <div class="flex items-center gap-3 flex-1">
+                        <div class="relative flex-1 max-w-sm">
+                            <i data-lucide="search" class="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4"></i>
+                            <input type="text" id="comparison-search" oninput="renderComparison()" placeholder="Search Party, Section..." class="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 shadow-sm transition-all" />
+                        </div>
+                        <select id="comparison-status-filter" onchange="renderComparison()" class="px-3.5 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:border-indigo-500 cursor-pointer shadow-sm font-medium">
+                            <option value="All">All Statuses</option>
+                            <option value="Consistent">Consistent</option>
+                            <option value="Value Variance">Value Variance</option>
+                            <option value="New Transaction">New Transaction</option>
+                            <option value="Missed Deduction">Missed Deduction</option>
+                        </select>
+                    </div>
+                    <!-- Summary pills -->
+                    <div id="comparison-summary-pills" class="flex gap-2"></div>
+                </div>
+                <div class="flex-1 overflow-auto relative">
+                    <table class="w-full text-left text-sm whitespace-nowrap">
+                        <thead class="sticky top-0 bg-white/95 backdrop-blur-sm text-slate-500 z-10 border-b border-slate-200 shadow-sm">
+                            <tr>
+                                <th class="px-5 py-3.5 font-semibold">Party Name</th>
+                                <th class="px-5 py-3.5 font-semibold">Section</th>
+                                <th class="px-5 py-3.5 font-semibold text-right">Prev TDS</th>
+                                <th class="px-5 py-3.5 font-semibold text-right">Curr TDS</th>
+                                <th class="px-5 py-3.5 font-semibold text-right">Variance</th>
+                                <th class="px-5 py-3.5 font-semibold text-center">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="comparison-tbody" class="divide-y divide-slate-100"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ═══ CONFIG TAB ═══ -->
+        <div id="panel-config" class="flex flex-col h-full space-y-6 max-w-5xl mx-auto w-full hidden-panel">
+            <div class="flex justify-between items-end">
+                <div>
+                    <h2 class="text-2xl font-bold text-slate-900 tracking-tight">Exclusion Configuration</h2>
+                    <p class="text-sm text-slate-500 mt-1">Define ledger keywords to exclude from Assessable Base before TDS calculation.</p>
+                </div>
+            </div>
+            <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex items-end gap-4">
+                <div class="flex-1">
+                    <label class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">New Section Name</label>
+                    <input type="text" id="new-sec-name" placeholder="e.g. TDS 194J Professional 10%" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"/>
+                </div>
+                <div class="w-32">
+                    <label class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Rate (%)</label>
+                    <input type="number" step="0.01" id="new-sec-rate" placeholder="10" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"/>
+                </div>
+                <button onclick="addSection()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition-colors shadow-sm h-[38px] flex items-center gap-2">
+                    <i data-lucide="plus" class="w-4 h-4"></i> Add Rule
+                </button>
+            </div>
+            <div id="config-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 pb-8 overflow-y-auto"></div>
+        </div>
+
+        <!-- Processing Overlay -->
+        <div id="processing-overlay" class="absolute inset-0 bg-white/70 backdrop-blur-[2px] flex flex-col items-center justify-center z-50 hidden-panel rounded-xl">
+            <div class="spinner mb-4"></div>
+            <div class="text-sm font-semibold text-indigo-700 tracking-wide animate-pulse">Processing Engine...</div>
+        </div>
+    </div>
+</main>
+
+<script>
+// ═══════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════
+let state = {
+    activeTab: 'audit',
+    activeComparisonSubTab: 'input',
+    tdsConfig: {
+        'TDS 194A': { rate: 10, exclusions: ['GST'] },
+        'TDS 194C 1%': { rate: 1, exclusions: ['GST', 'R&M', 'Labour'] },
+        'TDS 194C 2%': { rate: 2, exclusions: ['GST', 'R&M', 'Labour'] },
+        'TDS 194H': { rate: 5, exclusions: ['GST'] },
+        'TDS 194I 2% Plant & Equipment': { rate: 2, exclusions: ['GST'] },
+        'TDS 194I Rent 10%': { rate: 10, exclusions: ['GST'] },
+        'TDS 194J @2% FFTS': { rate: 2, exclusions: ['GST'] },
+        'TDS 194Q 0.1%': { rate: 0.1, exclusions: ['GST'] },
+        'TDS 94J Professional 10%': { rate: 10, exclusions: ['GST'] },
+        'TDS on Salary 192B': { rate: 0, exclusions: [] }
+    },
+    currentMonthRaw: '',
+    previousMonthRaw: '',
+    currentMonthData: [],
+    previousMonthData: [],
+    auditResultsCache: [],
+    comparisonResultsCache: [],
+    isProcessing: false,
+    pendingDeleteId: null
+};
+
+// ═══════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════
+const ensureDynamicConfig = (sectionName, rate) => {
+    if (!sectionName || sectionName === 'undefined' || sectionName === 'null') return;
+    if (!state.tdsConfig[sectionName]) {
+        const is194C = sectionName.toUpperCase().includes('194C');
+        state.tdsConfig[sectionName] = { rate, exclusions: is194C ? ['GST', 'R&M'] : ['GST'] };
+        renderConfig();
+    }
+};
+
+const isTaxLedger = (ledgerName) => {
+    const upper = ledgerName.toUpperCase();
+    return /\b(CGST|SGST|IGST|GST)\b/.test(upper) || /\bRCM\b/.test(upper);
+};
+
+const fmt = (n) => n.toLocaleString('en-IN', { minimumFractionDigits: 2 });
+
+// ═══════════════════════════════════════════════
+// PARSER
+// ═══════════════════════════════════════════════
+const parseTallyLedgerData = (rawText) => {
+    if (!rawText) return [];
+    const lines = rawText.trim().split('\n');
+    let results = [];
+    let currentSection = null;
+    let currentVoucher = null;
+
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        const upperLine = line.toUpperCase();
+        if (upperLine.includes('OPENING BALANCE') || upperLine.includes('CLOSING BALANCE')) continue;
+        if (/^[\d.,\t\s]+$/.test(line)) continue;
+
+        if (line.startsWith('Ledger:')) {
+            const cols = line.split('\t').map(c => c.trim()).filter(c => c);
+            if (cols.length >= 2 && cols[1] !== 'undefined' && cols[1] !== 'null') {
+                currentSection = cols[1];
+                const rateMatch = currentSection.match(/(\d+(?:\.\d+)?)%/);
+                const rate = rateMatch ? parseFloat(rateMatch[1]) : 0;
+                ensureDynamicConfig(currentSection, rate);
+            }
+            continue;
+        }
+        if (!currentSection) continue;
+
+        const cols = line.split('\t').map(c => c.trim()).filter(c => c);
+        if (cols.length === 0) continue;
+
+        if (/^\d{2}-[A-Za-z]{3}-\d{2,4}$/.test(cols[0]) || /^\d{4}-\d{2}-\d{2}$/.test(cols[0])) {
+            const date = cols[0];
+            let vchTypeIndex = cols.findIndex(c => ['Journal', 'Purchase', 'Payment', 'Receipt'].includes(c));
+            if (vchTypeIndex !== -1) {
+                const type = cols[vchTypeIndex];
+                if (type === 'Payment' || type === 'Receipt') { currentVoucher = null; continue; }
+                const vchNo = cols[vchTypeIndex + 1];
+                let particulars = 'Unknown';
+                if (cols[1] === 'Dr' || cols[1] === 'Cr') particulars = cols[2];
+                else particulars = cols[1];
+                let initialPartyName = 'Unknown';
+                if (particulars && !particulars.toLowerCase().includes('as per details')) initialPartyName = particulars;
+                const numbers = cols.filter(c => /^[\d,]+\.?\d*$/.test(c.replace(/,/g, '')));
+                const actualTds = numbers.length > 0 ? parseFloat(numbers[numbers.length - 1].replace(/,/g, '')) : 0;
+                currentVoucher = {
+                    id: `vch_${Date.now()}_${i}`,
+                    date, vchNo, section: currentSection,
+                    manualSectionOverride: null, manualBaseOverride: null,
+                    actualTds, partyName: initialPartyName, assessableValue: 0,
+                    baseBreakdown: [], _rawLines: [line],
+                    deleted: false, deletionRemark: ''
+                };
+                results.push(currentVoucher);
+            }
+        } else if (currentVoucher) {
+            currentVoucher._rawLines.push(line);
+            let ledgerName = cols[0];
+            if (ledgerName === 'Dr' || ledgerName === 'Cr') ledgerName = cols[1] || ledgerName;
+            const lastCol = cols[cols.length - 1];
+            let isDr = /\bDr\b/.test(lastCol) || /\bDr\b/.test(line);
+            let isCr = /\bCr\b/.test(lastCol) || /\bCr\b/.test(line);
+            const numStr = lastCol.replace(/[^\d.]/g, '');
+            const amount = parseFloat(numStr) || 0;
+            if (isDr) currentVoucher.baseBreakdown.push({ ledger: ledgerName, amount, isTax: isTaxLedger(ledgerName) });
+            if (isCr && !isTaxLedger(ledgerName) && !ledgerName.toUpperCase().includes('TDS')) {
+                if (currentVoucher.partyName === 'Unknown' || currentVoucher.partyName === '') currentVoucher.partyName = ledgerName;
+            }
+        }
+    }
+    return results;
+};
+
+// ═══════════════════════════════════════════════
+// AUDIT COMPUTE
+// ═══════════════════════════════════════════════
+const computeAuditResults = () => {
+    const tolerance = parseFloat(document.getElementById('variance-tolerance')?.value || 1.0);
+    state.auditResultsCache = state.currentMonthData.map(row => {
+        if (row.deleted) {
+            return { ...row, expectedRate: 0, expectedTds: 0, diff: 0, status: 'Deleted', effectiveSection: row.manualSectionOverride || row.section, assessableValue: row.assessableValue || 0 };
+        }
+        const effectiveSection = row.manualSectionOverride || row.section;
+        const conf = state.tdsConfig[effectiveSection] || { rate: 0, exclusions: [] };
+        let calculatedBase = 0, includedLedgers = [], excludedLedgersLog = [];
+        row.baseBreakdown.forEach(b => {
+            const isExcludedByConfig = conf.exclusions.some(ex => b.ledger.toUpperCase().includes(ex.toUpperCase()));
+            if (b.isTax || isExcludedByConfig) excludedLedgersLog.push(b.ledger);
+            else { calculatedBase += b.amount; includedLedgers.push(b.ledger); }
+        });
+        const netBase = row.manualBaseOverride !== null ? row.manualBaseOverride : calculatedBase;
+        row.assessableValue = netBase;
+        row.includedLedgers = includedLedgers;
+        row.excludedLedgers = excludedLedgersLog;
+        const expectedRate = conf.rate;
+        const expectedTds = (netBase * expectedRate) / 100;
+        const diff = row.actualTds - expectedTds;
+        const absDiff = Math.abs(diff);
+        let status = 'Correct';
+        if (row.manualBaseOverride !== null || row.manualSectionOverride) {
+            status = absDiff <= tolerance ? 'Corrected' : 'Mismatch';
+        } else if (netBase === 0 && row.actualTds > 0) {
+            status = 'Missing Base';
+        } else if (netBase > 0 && row.actualTds === 0) {
+            status = 'Missed';
+        } else if (absDiff > tolerance) {
+            status = 'Mismatch';
+        }
+        return { ...row, expectedRate, expectedTds, diff, status, effectiveSection };
+    });
+    updateStats();
+    if (state.activeTab === 'audit') renderAuditResults();
+};
+
+// ═══════════════════════════════════════════════
+// COMPARISON COMPUTE
+// ═══════════════════════════════════════════════
+// Normalize party name for consistent matching across months
+const normalizeParty = (name) => {
+    if (!name) return '';
+    return name
+        .toLowerCase()
+        .replace(/\b(pvt|private|ltd|limited|llp|inc|co|and|&)\b\.?/g, '')
+        .replace(/[^a-z0-9]/g, '')
+        .trim();
+};
+
+// Compute base amount from baseBreakdown applying section exclusions
+const computeBaseForRow = (row) => {
+    if (row.manualBaseOverride !== null && row.manualBaseOverride !== undefined) return row.manualBaseOverride;
+    if (row.assessableValue && row.assessableValue > 0) return row.assessableValue;
+    const sec = row.manualSectionOverride || row.section;
+    const conf = state.tdsConfig[sec] || { exclusions: [] };
+    let base = 0;
+    (row.baseBreakdown || []).forEach(b => {
+        const excluded = conf.exclusions.some(ex => b.ledger.toUpperCase().includes(ex.toUpperCase()));
+        if (!b.isTax && !excluded) base += b.amount;
+    });
+    return base;
+};
+
+const computeComparisonResults = () => {
+    const map = new Map();
+
+    state.previousMonthData.forEach(row => {
+        const sec = row.section;
+        const key = `${normalizeParty(row.partyName)}_${sec}`;
+        const prevBase = computeBaseForRow(row);
+        if (map.has(key)) {
+            const ex = map.get(key);
+            ex.prevAmount += prevBase;
+            ex.prevTds += row.actualTds;
+            if (row.actualTds > 0) ex.prevBreakdown.push(row.actualTds);
+        } else {
+            map.set(key, { prevAmount: prevBase, prevTds: row.actualTds, currAmount: 0, currTds: 0, party: row.partyName, section: sec, prevBreakdown: row.actualTds > 0 ? [row.actualTds] : [], currBreakdown: [] });
+        }
+    });
+
+    state.currentMonthData.filter(r => !r.deleted).forEach(row => {
+        const sec = row.manualSectionOverride || row.section;
+        const key = `${normalizeParty(row.partyName)}_${sec}`;
+        const currBase = computeBaseForRow(row);
+        if (map.has(key)) {
+            const ex = map.get(key);
+            ex.currAmount += currBase;
+            ex.currTds += row.actualTds;
+            if (row.actualTds > 0) ex.currBreakdown.push(row.actualTds);
+        } else {
+            map.set(key, { prevAmount: 0, prevTds: 0, currAmount: currBase, currTds: row.actualTds, party: row.partyName, section: sec, prevBreakdown: [], currBreakdown: row.actualTds > 0 ? [row.actualTds] : [] });
+        }
+    });
+
+    state.comparisonResultsCache = Array.from(map.values()).map(item => {
+        let status = '';
+        const tdsDiff = Math.abs(item.prevTds - item.currTds);
+        // Base status on TDS amounts — more reliable than base (base can be 0 for salary/zero-rate sections)
+        if (item.prevTds > 0 && item.currTds === 0) status = 'Missed Deduction';
+        else if (item.prevTds === 0 && item.currTds > 0) status = 'New Transaction';
+        else if (tdsDiff > 5) status = 'Value Variance';
+        else status = 'Consistent';
+        return { ...item, status };
+    });
+};
+
+// ═══════════════════════════════════════════════
+// STATUS BADGE
+// ═══════════════════════════════════════════════
+const STATUS_STYLES = {
+    'Correct':          { cls: 'bg-emerald-50 text-emerald-700 border-emerald-200', icon: 'check-circle-2' },
+    'Corrected':        { cls: 'bg-blue-50 text-blue-700 border-blue-200', icon: 'wrench' },
+    'Mismatch':         { cls: 'bg-amber-50 text-amber-700 border-amber-200', icon: 'alert-circle' },
+    'Missed':           { cls: 'bg-rose-50 text-rose-700 border-rose-200', icon: 'x-circle' },
+    'Missing Base':     { cls: 'bg-fuchsia-50 text-fuchsia-700 border-fuchsia-200', icon: 'file-question' },
+    'Deleted':          { cls: 'bg-slate-100 text-slate-500 border-slate-200', icon: 'trash-2' },
+    'Consistent':       { cls: 'bg-emerald-50 text-emerald-700 border-emerald-200', icon: 'check-circle-2' },
+    'Value Variance':   { cls: 'bg-amber-50 text-amber-700 border-amber-200', icon: 'trending-up' },
+    'New Transaction':  { cls: 'bg-indigo-50 text-indigo-700 border-indigo-200', icon: 'plus-circle' },
+    'Missed Deduction': { cls: 'bg-rose-50 text-rose-700 border-rose-200', icon: 'alert-triangle' },
+};
+
+const getStatusBadgeHtml = (status) => {
+    const s = STATUS_STYLES[status] || { cls: 'bg-slate-100 text-slate-500 border-slate-200', icon: 'activity' };
+    return `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wide border ${s.cls}"><i data-lucide="${s.icon}" class="w-3.5 h-3.5"></i>${status}</span>`;
+};
+
+// ═══════════════════════════════════════════════
+// STATS
+// ═══════════════════════════════════════════════
+const updateStats = () => {
+    const activeRows = state.currentMonthData.filter(r => !r.deleted);
+    const deletedRows = state.currentMonthData.filter(r => r.deleted);
+    document.getElementById('stat-rows').innerText = activeRows.length;
+    const errors = state.auditResultsCache.filter(r => !r.deleted && (r.status === 'Mismatch' || r.status === 'Missed' || r.status === 'Missing Base')).length;
+    document.getElementById('stat-errors').innerText = errors;
+    document.getElementById('audit-count').innerText = activeRows.length;
+    document.getElementById('audit-deleted-count').innerText = deletedRows.length;
+    document.getElementById('curr-month-count').innerText = `${activeRows.length} rows`;
+    document.getElementById('prev-month-count').innerText = `${state.previousMonthData.length} rows`;
+    document.getElementById('export-btn').disabled = state.auditResultsCache.filter(r => !r.deleted).length === 0 || state.isProcessing;
+};
+
+const setProcessing = (on) => {
+    state.isProcessing = on;
+    const overlay = document.getElementById('processing-overlay');
+    if (on) overlay.classList.remove('hidden-panel');
+    else overlay.classList.add('hidden-panel');
+};
+
+// ═══════════════════════════════════════════════
+// RENDER: AUDIT
+// ═══════════════════════════════════════════════
+window.renderAuditResults = () => {
+    const tbody = document.getElementById('audit-tbody');
+    const searchVal = document.getElementById('audit-search').value.toLowerCase();
+    const filterVal = document.getElementById('audit-status-filter').value;
+    const showDeleted = document.getElementById('show-deleted-toggle').checked;
+
+    let filtered = state.auditResultsCache;
+    if (!showDeleted) filtered = filtered.filter(r => !r.deleted);
+    if (filterVal !== 'All') filtered = filtered.filter(r => r.status === filterVal);
+    if (searchVal) filtered = filtered.filter(r =>
+        r.partyName.toLowerCase().includes(searchVal) ||
+        (r.vchNo && r.vchNo.toLowerCase().includes(searchVal)) ||
+        r.section.toLowerCase().includes(searchVal)
+    );
+
+    if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="9" class="px-5 py-16 text-center text-slate-500 font-medium bg-slate-50/50">No records found.</td></tr>`;
+        lucide.createIcons(); return;
+    }
+
+    const sectionOptions = Object.keys(state.tdsConfig).filter(s => s && s !== 'undefined' && s !== 'null');
+
+    tbody.innerHTML = filtered.map(row => {
+        const isDeleted = row.deleted;
+        const selectHtml = isDeleted ? `<span class="text-xs text-slate-400">${row.effectiveSection}</span>` : `
+            <select class="section-select bg-slate-50 border border-slate-200 rounded text-xs px-2 py-1 focus:border-indigo-500 focus:outline-none w-40 text-slate-700"
+                    onchange="updateSectionOverride('${row.id}', this.value)">
+                ${sectionOptions.map(sec => `<option value="${sec}" ${sec === row.effectiveSection ? 'selected' : ''}>${sec}</option>`).join('')}
+            </select>
+            ${row.manualSectionOverride ? `<div class="text-[10px] text-indigo-500 mt-1">Was: ${row.section}</div>` : ''}
+        `;
+
+        const deleteBtn = isDeleted
+            ? `<div class="text-[10px] text-rose-500 text-center" title="${row.deletionRemark}"><i data-lucide="trash-2" class="w-3.5 h-3.5 mx-auto"></i></div>`
+            : `<button onclick="openDeleteModal('${row.id}')" title="Delete entry" class="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg hover:bg-rose-50 text-slate-400 hover:text-rose-600"><i data-lucide="trash-2" class="w-4 h-4"></i></button>`;
+
+        return `<tr class="${isDeleted ? 'deleted-row' : 'hover:bg-slate-50 transition-colors'} group">
+            <td class="px-4 py-3"><div class="font-semibold text-slate-800">${row.partyName}</div>${isDeleted ? `<div class="text-[10px] text-rose-500 mt-0.5 italic">${row.deletionRemark}</div>` : ''}</td>
+            <td class="px-4 py-3 text-slate-500 text-xs font-mono-custom">${row.vchNo || '-'}</td>
+            <td class="px-4 py-3">${selectHtml}</td>
+            <td class="px-4 py-3 text-right">
+                <div class="flex items-center justify-end gap-1">
+                    <span class="text-slate-500 font-medium">₹</span>
+                    ${isDeleted ? `<span class="font-mono-custom text-sm text-slate-500">${fmt(row.assessableValue)}</span>` : `
+                    <input type="number" value="${row.assessableValue}" onchange="updateBaseOverride('${row.id}', this.value)" placeholder="0"
+                           class="w-24 text-right bg-transparent border-b border-dashed border-slate-300 focus:border-indigo-500 focus:outline-none font-mono-custom font-medium ${row.manualBaseOverride !== null ? 'text-indigo-600' : 'text-slate-800'}" />`}
+                </div>
+                ${!isDeleted && row.includedLedgers?.length > 0 && row.manualBaseOverride === null ? `<div class="text-[10px] text-emerald-600 mt-0.5 truncate max-w-[140px] ml-auto" title="${row.includedLedgers.join(', ')}">+ ${row.includedLedgers[0]}${row.includedLedgers.length > 1 ? '...' : ''}</div>` : ''}
+                ${!isDeleted && row.excludedLedgers?.length > 0 && row.manualBaseOverride === null ? `<div class="text-[10px] text-rose-500 truncate max-w-[140px] ml-auto" title="${row.excludedLedgers.join(', ')}">- ${row.excludedLedgers[0]}${row.excludedLedgers.length > 1 ? '...' : ''}</div>` : ''}
+                ${!isDeleted && row.manualBaseOverride !== null ? `<div class="text-[10px] text-indigo-500 mt-0.5 ml-auto">Manual Override</div>` : ''}
+            </td>
+            <td class="px-4 py-3 text-right font-mono-custom text-slate-500">₹${fmt(row.expectedTds)}<div class="text-[10px] text-slate-400 mt-0.5">@ ${row.expectedRate}%</div></td>
+            <td class="px-4 py-3 text-right font-mono-custom font-semibold ${!isDeleted ? (row.status === 'Correct' || row.status === 'Corrected' ? 'text-emerald-600' : (row.status === 'Missed' || row.status === 'Missing Base') ? 'text-rose-600' : 'text-amber-600') : 'text-slate-400'}">₹${fmt(row.actualTds)}</td>
+            <td class="px-4 py-3 text-right font-mono-custom text-slate-600">${row.diff > 0 ? '+' : ''}${fmt(row.diff)}</td>
+            <td class="px-4 py-3 text-center">${getStatusBadgeHtml(row.status)}</td>
+            <td class="px-4 py-3 text-center">${deleteBtn}</td>
+        </tr>`;
+    }).join('');
+    lucide.createIcons();
+};
+
+// ═══════════════════════════════════════════════
+// RENDER: COMPARISON
+// ═══════════════════════════════════════════════
+window.renderComparison = () => {
+    const tbody = document.getElementById('comparison-tbody');
+    if (state.comparisonResultsCache.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" class="px-5 py-16 text-center text-slate-500 font-medium bg-slate-50/50">Need both Current and Previous month data to compare. Go to Input tab.</td></tr>`;
+        document.getElementById('comparison-summary-pills').innerHTML = '';
+        lucide.createIcons(); return;
+    }
+
+    const searchVal = (document.getElementById('comparison-search')?.value || '').toLowerCase();
+    const filterVal = document.getElementById('comparison-status-filter')?.value || 'All';
+    let filtered = state.comparisonResultsCache;
+    if (filterVal !== 'All') filtered = filtered.filter(r => r.status === filterVal);
+    if (searchVal) filtered = filtered.filter(r => `${r.party} ${r.section} ${r.prevTds} ${r.currTds}`.toLowerCase().includes(searchVal));
+
+    // Summary pills
+    const counts = {};
+    state.comparisonResultsCache.forEach(r => { counts[r.status] = (counts[r.status] || 0) + 1; });
+    const pillColors = { 'Consistent': 'bg-emerald-50 text-emerald-700 border-emerald-200', 'Value Variance': 'bg-amber-50 text-amber-700 border-amber-200', 'New Transaction': 'bg-indigo-50 text-indigo-700 border-indigo-200', 'Missed Deduction': 'bg-rose-50 text-rose-700 border-rose-200' };
+    document.getElementById('comparison-summary-pills').innerHTML = Object.entries(counts).map(([s, c]) =>
+        `<span class="text-[11px] font-bold px-2.5 py-1 rounded-full border ${pillColors[s] || 'bg-slate-100 text-slate-600 border-slate-200'}">${c} ${s}</span>`
+    ).join('');
+
+    if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" class="px-5 py-16 text-center text-slate-500 font-medium">No results for current filter.</td></tr>`;
+        lucide.createIcons(); return;
+    }
+
+    const formatBreakdown = (arr) => {
+        if (!arr || arr.length <= 1) return '';
+        if (arr.length > 4) return `<div class="text-[10px] text-slate-400 mt-0.5">(${arr.slice(0,3).map(n => n.toLocaleString('en-IN')).join(' + ')} +${arr.length-3} more)</div>`;
+        return `<div class="text-[10px] text-slate-400 mt-0.5">(${arr.map(n => n.toLocaleString('en-IN')).join(' + ')})</div>`;
+    };
+
+    tbody.innerHTML = filtered.map(row => {
+        const varAmount = row.currTds - row.prevTds;
+        return `<tr class="hover:bg-slate-50 transition-colors">
+            <td class="px-5 py-3 font-semibold text-slate-800">${row.party}</td>
+            <td class="px-5 py-3"><span class="px-2 py-1 bg-slate-100 rounded text-xs text-slate-600 border border-slate-200 font-mono-custom">${row.section}</span></td>
+            <td class="px-5 py-3 text-right font-mono-custom text-slate-500">₹${row.prevTds.toLocaleString('en-IN')}${formatBreakdown(row.prevBreakdown)}</td>
+            <td class="px-5 py-3 text-right font-mono-custom text-slate-800 font-medium">₹${row.currTds.toLocaleString('en-IN')}${formatBreakdown(row.currBreakdown)}</td>
+            <td class="px-5 py-3 text-right font-mono-custom font-semibold ${Math.abs(varAmount) > 0 ? (varAmount > 0 ? 'text-emerald-600' : 'text-rose-600') : 'text-slate-400'}">${varAmount > 0 ? '+' : ''}${varAmount.toLocaleString('en-IN')}</td>
+            <td class="px-5 py-3 text-center">${getStatusBadgeHtml(row.status)}</td>
+        </tr>`;
+    }).join('');
+    lucide.createIcons();
+};
+
+// ═══════════════════════════════════════════════
+// RENDER: CONFIG
+// ═══════════════════════════════════════════════
+window.renderConfig = () => {
+    const grid = document.getElementById('config-grid');
+    let html = '';
+    Object.entries(state.tdsConfig).forEach(([sec, conf]) => {
+        const safeId = sec.replace(/\s+/g, '-');
+        const exclusionsHtml = conf.exclusions.length > 0
+            ? conf.exclusions.map(excl => `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white text-xs font-semibold text-slate-600 border border-slate-200 shadow-sm">${excl}<button onclick="removeRule('${sec}', '${excl}')" class="text-slate-400 hover:text-rose-500 transition-colors"><i data-lucide="x-circle" class="w-3.5 h-3.5"></i></button></span>`).join('')
+            : `<span class="text-xs text-slate-400 italic">No exclusions set. Base = Gross.</span>`;
+        html += `<div class="bg-slate-50 border border-slate-200 rounded-xl p-5 flex flex-col hover:border-indigo-300 transition-colors shadow-sm">
+            <div class="flex justify-between items-start mb-4">
+                <h3 class="text-[15px] font-bold text-slate-800">${sec} <span class="px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded text-xs border border-indigo-200">@${conf.rate}%</span></h3>
+            </div>
+            <div class="flex-1">
+                <label class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 block">Excluded Keywords</label>
+                <div class="flex flex-wrap gap-2 mb-4">${exclusionsHtml}</div>
+            </div>
+            <div class="mt-auto pt-4 border-t border-slate-200 flex gap-2">
+                <input type="text" id="input-${safeId}" placeholder="e.g. Material Cost" class="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-sm text-slate-700 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none shadow-sm" onkeydown="if(event.key==='Enter') addRule('${sec}')"/>
+                <button onclick="addRule('${sec}')" class="px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 hover:text-indigo-600 text-slate-600 rounded-lg text-sm font-semibold transition-colors shadow-sm">Add</button>
+            </div>
+        </div>`;
+    });
+    grid.innerHTML = html;
+    lucide.createIcons();
+};
+
+// ═══════════════════════════════════════════════
+// CONFIG ACTIONS
+// ═══════════════════════════════════════════════
+window.addSection = () => {
+    const name = document.getElementById('new-sec-name').value.trim();
+    const rate = parseFloat(document.getElementById('new-sec-rate').value);
+    if (name && !isNaN(rate)) {
+        state.tdsConfig[name] = { rate, exclusions: [] };
+        document.getElementById('new-sec-name').value = '';
+        document.getElementById('new-sec-rate').value = '';
+        renderConfig(); computeAuditResults();
+    }
+};
+window.addRule = (sec) => {
+    const input = document.getElementById(`input-${sec.replace(/\s+/g, '-')}`);
+    const val = input.value.trim();
+    if (val && state.tdsConfig[sec] && !state.tdsConfig[sec].exclusions.includes(val)) {
+        state.tdsConfig[sec].exclusions.push(val);
+        input.value = '';
+        renderConfig(); computeAuditResults();
+    }
+};
+window.removeRule = (sec, rule) => {
+    if (state.tdsConfig[sec]) {
+        state.tdsConfig[sec].exclusions = state.tdsConfig[sec].exclusions.filter(r => r !== rule);
+        renderConfig(); computeAuditResults();
+    }
+};
+window.updateSectionOverride = (rowId, newSection) => {
+    const row = state.currentMonthData.find(r => r.id === rowId);
+    if (row) { row.manualSectionOverride = newSection === row.section ? null : newSection; computeAuditResults(); }
+};
+window.updateBaseOverride = (rowId, val) => {
+    const row = state.currentMonthData.find(r => r.id === rowId);
+    if (row) { row.manualBaseOverride = (val === '' || isNaN(parseFloat(val))) ? null : parseFloat(val); computeAuditResults(); }
+};
+
+// ═══════════════════════════════════════════════
+// DELETE FLOW
+// ═══════════════════════════════════════════════
+window.openDeleteModal = (rowId) => {
+    const row = state.currentMonthData.find(r => r.id === rowId);
+    if (!row) return;
+    state.pendingDeleteId = rowId;
+    document.getElementById('modal-entry-info').innerHTML = `<strong>${row.partyName}</strong> &bull; ${row.vchNo || 'No Vch'} &bull; Section: ${row.effectiveSection || row.section} &bull; TDS: ₹${fmt(row.actualTds)}`;
+    document.getElementById('delete-remark-input').value = '';
+    document.getElementById('delete-remark-err').classList.add('hidden-panel');
+    document.getElementById('modal-overlay').classList.remove('hidden-panel');
+    setTimeout(() => document.getElementById('delete-remark-input').focus(), 100);
+};
+
+window.cancelDelete = () => {
+    state.pendingDeleteId = null;
+    document.getElementById('modal-overlay').classList.add('hidden-panel');
+};
+
+window.confirmDelete = () => {
+    const remark = document.getElementById('delete-remark-input').value.trim();
+    if (!remark) { document.getElementById('delete-remark-err').classList.remove('hidden-panel'); return; }
+    const row = state.currentMonthData.find(r => r.id === state.pendingDeleteId);
+    if (row) { row.deleted = true; row.deletionRemark = remark; }
+    state.pendingDeleteId = null;
+    document.getElementById('modal-overlay').classList.add('hidden-panel');
+    computeAuditResults();
+    computeComparisonResults();
+    if (state.activeTab === 'comparison') renderComparison();
+};
+
+// Close modal on backdrop click
+document.getElementById('modal-overlay').addEventListener('click', (e) => {
+    if (e.target === document.getElementById('modal-overlay')) cancelDelete();
+});
+
+// ═══════════════════════════════════════════════
+// CLEAR DATA
+// ═══════════════════════════════════════════════
+window.clearIngestionData = () => {
+    if (!confirm('Clear all ingested data? This will also reset audit results.')) return;
+    state.currentMonthRaw = '';
+    state.currentMonthData = [];
+    state.auditResultsCache = [];
+    document.getElementById('ingestion-textarea').value = '';
+    document.getElementById('ingestion-textarea').classList.remove('hidden-panel');
+    document.getElementById('ingestion-empty-state').classList.remove('hidden-panel');
+    document.getElementById('ingestion-preview').classList.add('hidden-panel');
+    document.getElementById('clear-ingestion-btn').classList.add('hidden-panel');
+    document.getElementById('comparison-curr-textarea').value = '';
+    document.getElementById('comparison-curr-textarea').classList.add('hidden-panel');
+    document.getElementById('comparison-curr-empty').classList.remove('hidden-panel');
+    computeAuditResults();
+    computeComparisonResults();
+    updateStats();
+};
+
+window.clearPreviousData = () => {
+    if (!confirm('Clear previous month data?')) return;
+    state.previousMonthRaw = '';
+    state.previousMonthData = [];
+    document.getElementById('comparison-prev-textarea').value = '';
+    document.getElementById('clear-prev-btn').classList.add('hidden-panel');
+    computeComparisonResults();
+    renderComparison();
+    updateStats();
+};
+
+// ═══════════════════════════════════════════════
+// EVENT HANDLERS
+// ═══════════════════════════════════════════════
+window.handlePasteCurrent = (e) => {
+    const text = e.target.value;
+    if (!text.trim()) return;
+    state.currentMonthRaw = text;
+    setProcessing(true);
+    setTimeout(() => {
+        state.currentMonthData = parseTallyLedgerData(text);
+        computeAuditResults();
+        computeComparisonResults();
+        document.getElementById('ingestion-textarea').classList.add('hidden-panel');
+        document.getElementById('ingestion-empty-state').classList.add('hidden-panel');
+        document.getElementById('ingestion-preview').classList.remove('hidden-panel');
+        document.getElementById('ingestion-success-msg').textContent = `Successfully mapped ${state.currentMonthData.length} valid TDS transactions. Ready for audit.`;
+        document.getElementById('ingestion-preview-text').value = `Parsed ${state.currentMonthData.length} transactions.\nReady for audit.`;
+        document.getElementById('clear-ingestion-btn').classList.remove('hidden-panel');
+        // Mirror to comparison
+        const currTA = document.getElementById('comparison-curr-textarea');
+        const currEmpty = document.getElementById('comparison-curr-empty');
+        currTA.value = `${state.currentMonthData.length} transactions loaded from Ingestion tab.`;
+        currTA.classList.remove('hidden-panel');
+        currEmpty.classList.add('hidden-panel');
+        document.getElementById('curr-month-count').innerText = `${state.currentMonthData.length} rows`;
+        setProcessing(false);
+    }, 100);
+};
+
+window.handlePastePrevious = (e) => {
+    const text = e.target.value;
+    state.previousMonthRaw = text;
+    setProcessing(true);
+    setTimeout(() => {
+        state.previousMonthData = parseTallyLedgerData(text);
+        computeComparisonResults();
+        renderComparison();
+        updateStats();
+        if (state.previousMonthData.length > 0) {
+            document.getElementById('clear-prev-btn').classList.remove('hidden-panel');
+        }
+        setProcessing(false);
+    }, 100);
+};
+
+// ═══════════════════════════════════════════════
+// TAB SWITCHING
+// ═══════════════════════════════════════════════
+window.switchTab = (tabId) => {
+    state.activeTab = tabId;
+    ['ingestion', 'audit', 'comparison', 'config'].forEach(id => {
+        const btn = document.getElementById(`nav-${id}`);
+        const panel = document.getElementById(`panel-${id}`);
+        const chevron = btn?.querySelector('.nav-chevron');
+        const icon = btn?.querySelector('.nav-icon');
+        if (id === tabId) {
+            if (btn) btn.className = "w-full flex items-center justify-between px-3 py-2.5 rounded-lg transition-all duration-200 bg-indigo-50 text-indigo-700 font-semibold border border-indigo-100 shadow-sm";
+            if (icon) { icon.classList.add('text-indigo-600'); icon.classList.remove('text-slate-400'); }
+            if (chevron) chevron.classList.remove('hidden');
+            if (panel) panel.classList.remove('hidden-panel');
+        } else {
+            if (btn) btn.className = "w-full flex items-center justify-between px-3 py-2.5 rounded-lg transition-all duration-200 text-slate-500 hover:bg-slate-100 hover:text-slate-900 border border-transparent";
+            if (icon) { icon.classList.remove('text-indigo-600'); icon.classList.add('text-slate-400'); }
+            if (chevron) chevron.classList.add('hidden');
+            if (panel) panel.classList.add('hidden-panel');
+        }
+    });
+    const titles = { ingestion: 'Input Stream', audit: 'Compliance Evaluation', comparison: 'MoM Reconciliation', config: 'Rules Configuration' };
+    document.getElementById('header-title').innerText = titles[tabId];
+    if (tabId === 'audit') renderAuditResults();
+    if (tabId === 'comparison') { renderComparison(); switchComparisonSubTab(state.activeComparisonSubTab); }
+    if (tabId === 'config') renderConfig();
+};
+
+window.switchComparisonSubTab = (subTab) => {
+    state.activeComparisonSubTab = subTab;
+    const inputPanel = document.getElementById('comparison-input-panel');
+    const resultsPanel = document.getElementById('comparison-results-panel');
+    const inputBtn = document.getElementById('subtab-btn-input');
+    const resultsBtn = document.getElementById('subtab-btn-results');
+    if (subTab === 'input') {
+        inputPanel.classList.remove('hidden-panel');
+        resultsPanel.classList.add('hidden-panel');
+        inputBtn.classList.add('active'); inputBtn.classList.remove('inactive');
+        resultsBtn.classList.add('inactive'); resultsBtn.classList.remove('active');
+    } else {
+        inputPanel.classList.add('hidden-panel');
+        resultsPanel.classList.remove('hidden-panel');
+        resultsBtn.classList.add('active'); resultsBtn.classList.remove('inactive');
+        inputBtn.classList.add('inactive'); inputBtn.classList.remove('active');
+        renderComparison();
+    }
+    lucide.createIcons();
+};
+
+// ═══════════════════════════════════════════════
+// EXPORT
+// ═══════════════════════════════════════════════
+window.openExportModal = () => {
+    if (state.auditResultsCache.filter(r => !r.deleted).length === 0) return;
+    document.getElementById('export-modal').classList.remove('hidden-panel');
+    lucide.createIcons();
+};
+window.closeExportModal = () => { document.getElementById('export-modal').classList.add('hidden-panel'); };
+document.getElementById('export-modal').addEventListener('click', e => { if (e.target === document.getElementById('export-modal')) closeExportModal(); });
+
+window.doExport = async () => {
+    closeExportModal();
+    if (!window.ExcelJS) { alert("ExcelJS library failed to load."); return; }
+    const includeDeleted = document.getElementById('export-include-deleted').checked;
+    const btnText = document.getElementById('export-text');
+    const originalText = btnText.innerText;
+    btnText.innerText = "Exporting...";
+    setProcessing(true);
+
+    try {
+        const workbook = new ExcelJS.Workbook();
+        workbook.creator = 'TDS Auditor System';
+
+        // Sheet 1: Summary (active entries only)
+        const summarySheet = workbook.addWorksheet('Summary', { properties: { tabColor: { argb: 'FF4F46E5' } } });
+        summarySheet.columns = [
+            { header: 'Section', key: 'sec', width: 30 },
+            { header: 'Amount Liable', key: 'amt', width: 20 },
+            { header: 'Actual TDS', key: 'act', width: 20 },
+            { header: 'TDS CAL (Formula)', key: 'cal', width: 20 },
+            { header: 'DIFF', key: 'diff', width: 20 },
+        ];
+        const summaryData = {};
+        state.auditResultsCache.filter(r => !r.deleted).forEach(r => {
+            const sec = r.effectiveSection;
+            if (!summaryData[sec]) summaryData[sec] = { amt: 0, act: 0, rate: state.tdsConfig[sec]?.rate || 0 };
+            summaryData[sec].amt += r.assessableValue;
+            summaryData[sec].act += r.actualTds;
+        });
+        let rowIndex = 2;
+        Object.entries(summaryData).forEach(([sec, data]) => {
+            const row = summarySheet.addRow({ sec, amt: data.amt, act: data.act });
+            row.getCell('cal').value = { formula: `B${rowIndex}*${data.rate}/100` };
+            row.getCell('diff').value = { formula: `C${rowIndex}-D${rowIndex}` };
+            rowIndex++;
+        });
+        if (rowIndex > 2) {
+            const totalRow = summarySheet.addRow({ sec: 'TOTAL', amt: { formula: `SUM(B2:B${rowIndex-1})` }, act: { formula: `SUM(C2:C${rowIndex-1})` } });
+            totalRow.getCell('cal').value = { formula: `SUM(D2:D${rowIndex-1})` };
+            totalRow.getCell('diff').value = { formula: `SUM(E2:E${rowIndex-1})` };
+            totalRow.font = { bold: true };
+        }
+
+        // Sheet 2: Audit Results
+        const auditSheet = workbook.addWorksheet('Audit Results');
+        auditSheet.columns = [
+            { header: 'S.No.', key: 'sno', width: 8 },
+            { header: 'Month', key: 'month', width: 12 },
+            { header: 'TDS Section', key: 'sec', width: 15 },
+            { header: 'Nature of Payment', key: 'nature', width: 20 },
+            { header: 'Amount Liable to TDS', key: 'amt', width: 20 },
+            { header: 'TDS Rate', key: 'rate', width: 10 },
+            { header: 'TDS Amt.', key: 'act', width: 15 },
+            { header: 'TDS CAL', key: 'cal', width: 15 },
+            { header: 'DIFF', key: 'diff', width: 15 },
+            { header: 'TDS Deducted date', key: 'date', width: 18 },
+            { header: 'BSR Code', key: 'bsr', width: 15 },
+            { header: 'TDS Deposit Date', key: 'depDate', width: 18 },
+            { header: 'Pradip Remarks', key: 'pradip', width: 15 },
+            { header: 'Challan No.', key: 'challan', width: 15 },
+            { header: 'Challan Amount', key: 'chalAmt', width: 15 },
+            { header: 'Party Name', key: 'party', width: 35 },
+            { header: 'PAN No.', key: 'pan', width: 15 },
+            { header: 'Challan Copy Rcvd', key: 'chalCopy', width: 15 },
+            { header: 'Remarks', key: 'remarks', width: 30 },
+            { header: 'Sys Status', key: 'status', width: 15 },
+            { header: 'Voucher No', key: 'vchNo', width: 15 },
+            { header: 'Deletion Remark', key: 'delRemark', width: 25 },
+        ];
+
+        [summarySheet, auditSheet].forEach(sheet => {
+            sheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+            sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F172A' } };
+        });
+
+        const groupedData = {};
+        const rowsToExport = includeDeleted ? state.auditResultsCache : state.auditResultsCache.filter(r => !r.deleted);
+        rowsToExport.forEach(r => {
+            const sec = r.effectiveSection;
+            if (!groupedData[sec]) groupedData[sec] = [];
+            groupedData[sec].push(r);
+        });
+
+        let rIndex = 2;
+        Object.entries(groupedData).forEach(([sec, rows]) => {
+            let sno = 1;
+            const cleanSecMatch = sec.match(/19[0-9A-Z]+/);
+            const cleanSec = cleanSecMatch ? cleanSecMatch[0] : sec;
+            rows.forEach(r => {
+                let remark = r.deletionRemark ? '' : '';
+                if (!r.deleted) {
+                    if (r.manualSectionOverride || r.manualBaseOverride !== null) remark = 'Corrected manually';
+                    else if (r.status === 'Missed' || r.status === 'Mismatch' || r.status === 'Missing Base') remark = `Review required - ${r.status}`;
+                }
+                const row = auditSheet.addRow({
+                    sno: sno++, month: '', sec: cleanSec, nature: '',
+                    amt: r.assessableValue, rate: r.expectedRate, act: r.actualTds,
+                    date: r.date, party: r.partyName,
+                    remarks: remark, status: r.status, vchNo: r.vchNo,
+                    delRemark: r.deletionRemark || ''
+                });
+                row.getCell('cal').value = { formula: `E${rIndex}*F${rIndex}/100` };
+                row.getCell('diff').value = { formula: `G${rIndex}-H${rIndex}` };
+                const statusCell = row.getCell('status');
+                if (r.deleted) {
+                    row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF2F2' } };
+                    row.font = { color: { argb: 'FFB91C1C' }, italic: true };
+                } else if (r.status === 'Missed' || r.status === 'Missing Base') statusCell.font = { color: { argb: 'FFE11D48' } };
+                else if (r.status === 'Mismatch') statusCell.font = { color: { argb: 'FFD97706' } };
+                else if (r.status === 'Correct' || r.status === 'Corrected') statusCell.font = { color: { argb: 'FF059669' } };
+                rIndex++;
+            });
+            const sepRow = auditSheet.addRow({});
+            sepRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
+            rIndex++;
+        });
+
+        const buffer = await workbook.xlsx.writeBuffer();
+        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `TDS_Audit_Report_${new Date().getTime()}.xlsx`;
+        a.click();
+        window.URL.revokeObjectURL(url);
+    } catch (error) {
+        console.error("Export failed:", error);
+        alert("Failed to export Excel.");
+    } finally {
+        setProcessing(false);
+        btnText.innerText = originalText;
+    }
+};
+
+// ═══════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════
+window.addEventListener('DOMContentLoaded', () => {
+    lucide.createIcons();
+    switchTab('audit');
+    renderConfig();
+    updateStats();
+});
+</script>
+</body>
+</html>
