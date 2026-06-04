@@ -3,22 +3,168 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Finance Tools Directory</title>
+    <title>Finance Automation Portal</title>
+    <style>
+        :root {
+            --bg-color: #f8fafc;
+            --card-bg: #ffffff;
+            --text-main: #0f172a;
+            --text-muted: #475569;
+            --primary: #2563eb;
+            --primary-hover: #1d4ed8;
+            --border-color: #e2e8f0;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            line-height: 1.6;
+            padding: 2rem 1rem;
+        }
+
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+
+        header {
+            margin-bottom: 3rem;
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 1.5rem;
+        }
+
+        h1 {
+            font-size: 2.25rem;
+            font-weight: 700;
+            color: var(--text-main);
+            letter-spacing: -0.05em;
+        }
+
+        .subtitle {
+            color: var(--text-muted);
+            font-size: 1.1rem;
+            margin-top: 0.5rem;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 3rem;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.75rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px Gren 6px -4px rgba(0, 0, 0, 0.05);
+        }
+
+        .card-content h2 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 0.75rem;
+            color: var(--text-main);
+        }
+
+        .card-content p {
+            font-size: 0.925rem;
+            color: var(--text-muted);
+            margin-bottom: 1.5rem;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.625rem 1.2rem;
+            font-size: 0.9rem;
+            font-weight: 500;
+            text-decoration: none;
+            border-radius: 6px;
+            background-color: var(--primary);
+            color: white;
+            transition: background-color 0.15s ease;
+        }
+
+        .btn:hover {
+            background-color: var(--primary-hover);
+        }
+
+        footer {
+            text-align: center;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-top: auto;
+        }
+    </style>
 </head>
 <body>
 
-    <h1>Welcome to My Finance Tools</h1>
-    <p>Select a tool below to get started:</p>
+    <div class="container">
+        <header>
+            <h1>Financial Automation Hub</h1>
+            <p class="subtitle">Select a utility tool below to optimize, process, or reconcile your financial workflows.</p>
+        </header>
 
-    <nav>
-        <ul>
-            <!-- Replace these names with your actual HTML file names -->
-            <li><a href="TDSTallyTool.html">TDS working Helper from Tally input</a></li>
-            <li><a href="uberFlow.html">Uber PT to Flow chart</a></li>
-            <li><a href="InvoiceFromTallyColumnar.html">Invoice from tally colunmar - GST ledgers</a></li>
-            <li><a href="recon.html">Recon</a></li>
-        </ul>
-    </nav>
+        <main>
+            <div class="dashboard-grid">
+                
+                <div class="card">
+                    <div class="card-content">
+                        <h2>TDS Tally Helper</h2>
+                        <p>Streamline TDS compliance and calculation validations using raw Tally data inputs.</p>
+                    </div>
+                    <a href="TDSTallyTool.html" class="btn">Launch Tool</a>
+                </div>
+
+                <div class="card">
+                    <div class="card-content">
+                        <h2>Uber PT Flowchart</h2>
+                        <p>Convert Uber Partner/Payout data structures into clear, logical cash flow charts.</p>
+                    </div>
+                    <a href="uberFlow.html" class="btn">Launch Tool</a>
+                </div>
+
+                <div class="card">
+                    <div class="card-content">
+                        <h2>Tally Columnar Extractor</h2>
+                        <p>Generate precise invoice records from Tally Columnar reports using GST ledgers.</p>
+                    </div>
+                    <a href="InvoiceFromTallyColumnar.html" class="btn">Launch Tool</a>
+                </div>
+
+                <div class="card">
+                    <div class="card-content">
+                        <h2>Reconciliation Engine</h2>
+                        <p>Execute automated data matching, cross-referencing, and discrepancy reporting.</p>
+                    </div>
+                    <a href="recon.html" class="btn">Launch Tool</a>
+                </div>
+
+            </div>
+        </main>
+
+        <footer>
+            <p> All tools built for internal efficiency.</p>
+        </footer>
+    </div>
 
 </body>
 </html>
