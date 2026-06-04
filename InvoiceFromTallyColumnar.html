@@ -419,11 +419,16 @@
                 if(!h) return;
                 
                 let hasNumericValues = false;
-                for (let i = 0; i < Math.min(dataRows.length, 50); i++) {
+                // BUG FIX: Look through all rows, not just the first 50, to ensure we don't miss columns with sparse numbers
+                for (let i = 0; i < dataRows.length; i++) {
                     const cellVal = dataRows[i][index];
                     if (cellVal !== null && cellVal !== undefined && cellVal !== '') {
                         let cleanStr = String(cellVal).replace(/,/g, '').trim();
+                        // Handle accounting brackets (123)
                         if (cleanStr.startsWith('(') && cleanStr.endsWith(')')) cleanStr = cleanStr.substring(1, cleanStr.length - 1);
+                        // Handle Tally accounting suffixes like Dr or Cr
+                        cleanStr = cleanStr.replace(/\s*(Dr|Cr)\.?\s*$/i, ''); 
+
                         if (/^-?\d+(\.\d+)?$/.test(cleanStr)) {
                             hasNumericValues = true; break;
                         }
@@ -565,7 +570,8 @@
                     if (!exclusions.has(index)) {
                         let cleanStr = String(cell).replace(/,/g, '').trim();
                         if (cleanStr.startsWith('(') && cleanStr.endsWith(')')) cleanStr = cleanStr.substring(1, cleanStr.length - 1);
-                        
+                        cleanStr = cleanStr.replace(/\s*(Dr|Cr)\.?\s*$/i, ''); // Added Dr/Cr support
+
                         if (/^-?\d+(\.\d+)?$/.test(cleanStr)) {
                             const numVal = parseFloat(cleanStr);
                             if (numVal !== 0) {
@@ -592,6 +598,7 @@
                         if (exclusions.has(index) && !mappedIndices.includes(index) && headerName.toLowerCase() !== 'gross total' && headerName !== '') {
                             let cleanStr = String(cell).replace(/,/g, '').trim();
                             if (cleanStr.startsWith('(') && cleanStr.endsWith(')')) cleanStr = cleanStr.substring(1, cleanStr.length - 1);
+                            cleanStr = cleanStr.replace(/\s*(Dr|Cr)\.?\s*$/i, ''); // Added Dr/Cr support
                             
                             if (/^-?\d+(\.\d+)?$/.test(cleanStr)) {
                                 const numVal = parseFloat(cleanStr);
@@ -624,25 +631,58 @@
             const errorList = document.getElementById('error-list');
             errorList.innerHTML = '';
             
-            let missingTrade = 0, missingTaxable = 0, taxMismatch = 0, cgstSgstMismatch = 0;
+            const errorGroups = {
+                "Missing Trade Name": [],
+                "Missing Taxable Value": [],
+                "Tax Rate Mismatch": [],
+                "CGST & SGST Mismatch": []
+            };
+
+            let hasErrors = false;
 
             processedData.forEach(row => {
-                if (row._errors.includes("Missing Trade Name")) missingTrade++;
-                if (row._errors.includes("Missing Taxable Value")) missingTaxable++;
-                if (row._errors.includes("Tax Rate Mismatch")) taxMismatch++;
-                if (row._errors.includes("CGST & SGST Mismatch")) cgstSgstMismatch++;
+                if (row._errors && row._errors.length > 0) {
+                    hasErrors = true;
+                    // Extract an identifier to show the user (Invoice No, then Voucher No, then Row Index)
+                    let identifier = row["Invoice number"] || row["Voucher No."] || `Row ${row._originalIndex + 1}`;
+                    if (!identifier || String(identifier).trim() === '') identifier = `Row ${row._originalIndex + 1}`;
+
+                    row._errors.forEach(err => {
+                        if (errorGroups[err]) {
+                            errorGroups[err].push({ identifier: identifier, index: row._originalIndex });
+                        }
+                    });
+                }
             });
 
-            if (missingTrade + missingTaxable + taxMismatch + cgstSgstMismatch > 0) {
+            if (hasErrors) {
                 errorDashboard.classList.remove('hidden');
-                if (missingTrade > 0) errorList.innerHTML += `<li><strong>${missingTrade} row(s)</strong> missing Trade/Legal Name.</li>`;
-                if (missingTaxable > 0) errorList.innerHTML += `<li><strong>${missingTaxable} row(s)</strong> missing Taxable Value.</li>`;
-                if (taxMismatch > 0) errorList.innerHTML += `<li><strong>${taxMismatch} row(s)</strong> with Tax Rate Mismatches.</li>`;
-                if (cgstSgstMismatch > 0) errorList.innerHTML += `<li><strong>${cgstSgstMismatch} row(s)</strong> with CGST & SGST Mismatches.</li>`;
+                for (const [errType, items] of Object.entries(errorGroups)) {
+                    if (items.length > 0) {
+                        // Create clickable links for each invoice with an error
+                        const links = items.map(item => `<button onclick="scrollToRow(${item.index})" class="text-blue-700 hover:text-blue-900 font-bold underline hover:bg-blue-100 px-1 rounded transition-colors cursor-pointer">${item.identifier}</button>`).join(', ');
+                        errorList.innerHTML += `<li class="mb-2 leading-relaxed"><strong>${items.length} row(s)</strong> with ${errType}: <span class="ml-1">${links}</span></li>`;
+                    }
+                }
             } else {
                 errorDashboard.classList.add('hidden');
             }
         }
+
+        // Helper function to scroll to a specific row and highlight it
+        window.scrollToRow = function(index) {
+            const tr = document.getElementById(`row-${index}`);
+            if (tr) {
+                tr.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                // Add a yellow flash effect to draw the eye
+                tr.className = 'bg-yellow-100 transition-colors duration-300 group';
+                setTimeout(() => {
+                    tr.className = 'hover:bg-slate-50 transition-colors group'; // Reset back
+                }, 2000);
+            } else {
+                showToast("Row is not currently visible in the preview. Try downloading the CSV.", "error");
+            }
+        };
 
         function renderPreview() {
             updateErrorDashboard();
@@ -658,10 +698,12 @@
             previewHead.appendChild(headTr);
 
             previewBody.innerHTML = '';
-            const previewRows = processedData.slice(0, 100);
+            // Increased slice to 500 rows so that clicked errors stay in render view
+            const previewRows = processedData.slice(0, 500);
             
             previewRows.forEach(rowObj => {
                 const tr = document.createElement('tr');
+                tr.id = `row-${rowObj._originalIndex}`; // Added ID to scroll to
                 tr.className = 'hover:bg-slate-50 transition-colors group';
                 
                 finalOrder.forEach(col => {
