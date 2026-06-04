@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tally Columnar to Invoice Converter</title>
+    
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Jspreadsheet Community Edition (Pinned to v4 to prevent worksheets error) -->
+    <script src="https://cdn.jsdelivr.net/npm/jspreadsheet-ce@4/dist/index.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jspreadsheet-ce@4/dist/jspreadsheet.min.css" type="text/css" />
+    <script src="https://cdn.jsdelivr.net/npm/jsuites/dist/jsuites.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jsuites/dist/jsuites.min.css" type="text/css" />
+
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        .jexcel_container { max-width: 100%; }
+        .custom-scrollbar::-webkit-scrollbar { height: 8px; width: 8px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        .loader { border: 3px solid #f3f3f3; border-top: 3px solid #2563eb; border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col text-slate-800">
+
+    <header class="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-10">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <svg class="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                <h1 class="text-xl font-bold text-slate-800 tracking-tight">Tally to Invoice Converter</h1>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-grow max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
+        
+        <!-- Tabs Navigation -->
+        <div class="border-b border-slate-200 mb-6">
+            <nav class="-mb-px flex space-x-6 overflow-x-auto custom-scrollbar" aria-label="Tabs" id="tabs-nav">
+                <button onclick="switchTab('step-1')" id="tab-btn-1" class="tab-btn active border-blue-500 text-blue-600 whitespace-nowrap py-4 px-2 border-b-2 font-semibold text-sm transition-colors">1. Data Input</button>
+                <button onclick="switchTab('step-2')" id="tab-btn-2" class="tab-btn border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 whitespace-nowrap py-4 px-2 border-b-2 font-medium text-sm transition-colors cursor-not-allowed opacity-60" disabled>2. Map Columns</button>
+                <button onclick="switchTab('step-3')" id="tab-btn-3" class="tab-btn border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 whitespace-nowrap py-4 px-2 border-b-2 font-medium text-sm transition-colors cursor-not-allowed opacity-60" disabled>3. Exclusions</button>
+                <button onclick="switchTab('step-4')" id="tab-btn-4" class="tab-btn border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 whitespace-nowrap py-4 px-2 border-b-2 font-medium text-sm transition-colors cursor-not-allowed opacity-60" disabled>4. Preview & Download</button>
+            </nav>
+        </div>
+
+        <!-- Step 1: Paste Grid -->
+        <div id="step-1" class="tab-content bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6 transition-all duration-300 block">
+            <h2 class="text-lg font-semibold mb-2">Paste Tally Columnar Data</h2>
+            <p class="text-sm text-slate-600 mb-4">Click inside the top-left cell of the grid below and press <strong>Ctrl+V</strong> to paste your data directly from Excel. Ensure your first row contains the headers.</p>
+            
+            <div class="border border-slate-300 rounded-lg overflow-hidden mb-4 custom-scrollbar">
+                <div id="spreadsheet"></div>
+            </div>
+
+            <div class="flex justify-end">
+                <button id="btn-load-grid" class="px-6 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 shadow-sm flex items-center gap-2 transition-colors">
+                    <span>Process Data & Next</span>
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+                </button>
+            </div>
+            <div id="loading-indicator" class="hidden flex items-center justify-center mt-4 gap-2 text-blue-600 font-medium">
+                <div class="loader"></div> Reading data...
+            </div>
+        </div>
+
+        <!-- Step 2: Mapping -->
+        <div id="step-2" class="tab-content hidden bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6 transition-all duration-300">
+            <h2 class="text-lg font-semibold mb-2">Map Tally Columns to Invoice Fields</h2>
+            <p class="text-sm text-slate-600 mb-4">Your previous mappings are saved automatically.</p>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="mapping-container">
+                <!-- Dropdowns will be injected here -->
+            </div>
+            <div class="flex justify-end mt-6">
+                <button onclick="switchTab('step-3')" class="px-6 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 shadow-sm flex items-center gap-2 transition-colors">
+                    <span>Next: Tax Exclusions</span>
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- Step 3: Taxable Value Exclusions -->
+        <div id="step-3" class="tab-content hidden bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6 transition-all duration-300">
+            <h2 class="text-lg font-semibold mb-2">Taxable Value Settings</h2>
+            <p class="text-sm text-slate-600 mb-4">Taxable Value is calculated by summing numeric ledger columns. Select columns to <strong>EXCLUDE</strong> from this calculation (like IGST, CGST, Round Offs, etc.). Your selections are saved for future use.</p>
+            
+            <div class="p-4 bg-slate-50 border border-slate-200 rounded-lg">
+                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3" id="exclusion-container">
+                    <!-- Checkboxes will be injected here -->
+                </div>
+            </div>
+
+            <div class="mt-6 flex justify-end">
+                <button id="btn-generate" class="px-6 py-2.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 shadow-sm flex items-center gap-2 transition-colors">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+                    Save Settings & Generate
+                </button>
+            </div>
+        </div>
+
+        <!-- Step 4: Preview & Download -->
+        <div id="step-4" class="tab-content hidden bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6 transition-all duration-300">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-4">
+                <h2 class="text-lg font-semibold">Preview & Download</h2>
+                <button id="btn-download" class="px-5 py-2 bg-slate-800 text-white rounded-lg text-sm font-medium hover:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-900 shadow-sm flex items-center gap-2 transition-colors w-full sm:w-auto justify-center">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                    Download CSV
+                </button>
+            </div>
+            
+            <div class="mb-2 text-sm text-slate-500 font-medium" id="row-count-display"></div>
+
+            <div class="overflow-x-auto border border-slate-200 rounded-lg custom-scrollbar">
+                <table class="min-w-full divide-y divide-slate-200">
+                    <thead class="bg-slate-50" id="preview-head"></thead>
+                    <tbody class="bg-white divide-y divide-slate-200" id="preview-body"></tbody>
+                </table>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        // State variables
+        let rawData = [];
+        let headers = [];
+        let dataRows = [];
+        let processedData = [];
+        let jspreadsheetObj = null;
+
+        // Load saved preferences from LocalStorage
+        let savedPrefs = JSON.parse(localStorage.getItem('tallyConverterPrefs')) || {
+            mappings: {},
+            exclusions: []
+        };
+
+        // Required Output Columns
+        const requiredColumns = [
+            "Date", "Trade/Legal name", "Invoice type", "Voucher No.", 
+            "Invoice number", "Invoice Date", "GSTIN of supplier", 
+            "IGST", "CGST", "SGST", "Cess", "Status"
+        ];
+
+        // Final output order
+        const finalOrder = [
+            "Date", "Trade/Legal name", "Invoice type", "Voucher No.", 
+            "Invoice number", "Invoice Date", "GSTIN of supplier", 
+            "Taxable Value", "Tax Rate", "Expense Ledger", "IGST", "CGST", "SGST", "Cess", "Status"
+        ];
+
+        // Hardcoded Default Mappings based on user requirements
+        const defaultMappings = {
+            "Date": "Date",
+            "Trade/Legal name": "Particulars",
+            "Invoice type": "Voucher Type",
+            "Voucher No.": "Voucher No.",
+            "Invoice number": "Voucher Ref. No.",
+            "Invoice Date": "Voucher Ref. Date",
+            "GSTIN of supplier": "GSTIN/UIN",
+            "IGST": "INPUT IGST -KAR",
+            "CGST": "INPUT CGST -KAR",
+            "SGST": "INPUT SGST-KAR"
+        };
+
+        // DOM Elements
+        const btnLoadGrid = document.getElementById('btn-load-grid');
+        const mappingContainer = document.getElementById('mapping-container');
+        const exclusionContainer = document.getElementById('exclusion-container');
+        const btnGenerate = document.getElementById('btn-generate');
+        const previewHead = document.getElementById('preview-head');
+        const previewBody = document.getElementById('preview-body');
+        const btnDownload = document.getElementById('btn-download');
+        const rowCountDisplay = document.getElementById('row-count-display');
+        const loadingIndicator = document.getElementById('loading-indicator');
+        const tabContents = document.querySelectorAll('.tab-content');
+        const tabBtns = document.querySelectorAll('.tab-btn');
+
+        function switchTab(tabId) {
+            // Hide all contents
+            tabContents.forEach(content => {
+                content.classList.add('hidden');
+                content.classList.remove('block');
+            });
+            // Show target content
+            const target = document.getElementById(tabId);
+            target.classList.remove('hidden');
+            target.classList.add('block');
+
+            // Update tab styles
+            tabBtns.forEach(btn => {
+                btn.classList.remove('border-blue-500', 'text-blue-600', 'font-semibold');
+                btn.classList.add('border-transparent', 'text-slate-500', 'font-medium');
+            });
+            const targetBtn = document.getElementById(`tab-btn-${tabId.split('-')[1]}`);
+            targetBtn.classList.add('border-blue-500', 'text-blue-600', 'font-semibold');
+            targetBtn.classList.remove('border-transparent', 'text-slate-500', 'font-medium');
+        }
+
+        function enableTabs() {
+            tabBtns.forEach(btn => {
+                btn.removeAttribute('disabled');
+                btn.classList.remove('cursor-not-allowed', 'opacity-60');
+            });
+        }
+
+        // Initialize grid on load
+        document.addEventListener('DOMContentLoaded', () => {
+            try {
+                jspreadsheetObj = jspreadsheet(document.getElementById('spreadsheet'), {
+                    minDimensions: [15, 20],
+                    defaultColWidth: 100,
+                    tableOverflow: true,
+                    tableWidth: "100%",
+                    tableHeight: "350px",
+                    columnSorting: false,
+                    wordWrap: true,
+                });
+            } catch (err) {
+                console.error("Grid initialization failed:", err);
+                document.getElementById('spreadsheet').innerHTML = "<p class='text-red-500'>Failed to load grid. Please check your internet connection.</p>";
+            }
+        });
+
+        btnLoadGrid.addEventListener('click', () => {
+            if (!jspreadsheetObj) return;
+            
+            loadingIndicator.classList.remove('hidden');
+
+            setTimeout(() => {
+                try {
+                    rawData = jspreadsheetObj.getData();
+                    processRawData();
+                } catch(e) {
+                    alert("Error reading data. Make sure you pasted correctly.");
+                }
+                loadingIndicator.classList.add('hidden');
+            }, 50);
+        });
+
+        function processRawData() {
+            // Find the first row that actually has data (usually headers)
+            let headerRowIndex = -1;
+            for(let i = 0; i < rawData.length; i++) {
+                // check if row is not completely empty
+                if(rawData[i].some(cell => cell !== null && cell !== '')) {
+                    headerRowIndex = i;
+                    break;
+                }
+            }
+
+            if (headerRowIndex === -1) {
+                alert("The grid appears to be empty. Please paste your data first.");
+                return;
+            }
+
+            headers = rawData[headerRowIndex].map(h => String(h || '').trim());
+            
+            // Extract remaining rows as data, filtering out entirely empty rows
+            dataRows = [];
+            for(let i = headerRowIndex + 1; i < rawData.length; i++) {
+                const row = rawData[i];
+                if(row.some(cell => cell !== null && cell !== '')) {
+                    dataRows.push(row);
+                }
+            }
+
+            buildMappingUI();
+            buildExclusionUI();
+            enableTabs();
+            switchTab('step-2');
+        }
+
+        function buildMappingUI() {
+            mappingContainer.innerHTML = '';
+            
+            requiredColumns.forEach(reqCol => {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'flex flex-col gap-1';
+                
+                const label = document.createElement('label');
+                label.className = 'text-sm font-medium text-slate-700';
+                label.textContent = reqCol;
+                
+                const select = document.createElement('select');
+                select.className = 'column-map-select w-full rounded-md border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm p-2 border';
+                select.dataset.target = reqCol;
+                
+                const defaultOption = document.createElement('option');
+                defaultOption.value = '';
+                defaultOption.textContent = '-- Ignore / Leave Blank --';
+                select.appendChild(defaultOption);
+
+                // Determine which index should be selected
+                let selectedIndex = -1;
+
+                // 1. Check LocalStorage Memory first
+                if (savedPrefs.mappings && savedPrefs.mappings[reqCol]) {
+                    selectedIndex = headers.findIndex(h => h === savedPrefs.mappings[reqCol]);
+                }
+                
+                // 2. Check hardcoded specific defaults
+                if (selectedIndex === -1 && defaultMappings[reqCol]) {
+                    selectedIndex = headers.findIndex(h => h.trim().toLowerCase() === defaultMappings[reqCol].toLowerCase());
+                }
+
+                // 3. Simple auto-match logic fallback
+                if (selectedIndex === -1) {
+                    selectedIndex = headers.findIndex(h => h.toLowerCase().includes(reqCol.toLowerCase()) || reqCol.toLowerCase().includes(h.toLowerCase()));
+                }
+
+                // Populate options
+                headers.forEach((h, index) => {
+                    if(!h) return; // skip empty columns
+                    const option = document.createElement('option');
+                    option.value = index;
+                    option.textContent = h;
+                    
+                    if (index === selectedIndex) {
+                        option.selected = true;
+                    }
+                    
+                    select.appendChild(option);
+                });
+
+                wrapper.appendChild(label);
+                wrapper.appendChild(select);
+                mappingContainer.appendChild(wrapper);
+            });
+        }
+
+        function buildExclusionUI() {
+            exclusionContainer.innerHTML = '';
+            
+            headers.forEach((h, index) => {
+                if(!h) return;
+                
+                // Only show columns that contain numeric values (value fields)
+                let hasNumericValues = false;
+                for (let i = 0; i < dataRows.length; i++) {
+                    const cellVal = dataRows[i][index];
+                    if (cellVal !== null && cellVal !== undefined && cellVal !== '') {
+                        let cleanStr = String(cellVal).replace(/,/g, '').trim();
+                        // Handle accounting parenthesis format
+                        if (cleanStr.startsWith('(') && cleanStr.endsWith(')')) {
+                            cleanStr = cleanStr.substring(1, cleanStr.length - 1);
+                        }
+                        // Check if it's a pure number (integers or decimals)
+                        if (/^-?\d+(\.\d+)?$/.test(cleanStr)) {
+                            hasNumericValues = true;
+                            break;
+                        }
+                    }
+                }
+
+                // If column has no numerical values, skip rendering it in exclusions
+                if (!hasNumericValues) return;
+                
+                const wrapper = document.createElement('label');
+                wrapper.className = 'flex items-center gap-2 cursor-pointer p-2 hover:bg-white rounded border border-transparent hover:border-slate-200 transition-colors';
+                
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.className = 'exclude-checkbox w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500';
+                checkbox.value = index;
+                
+                // 1. Check LocalStorage Memory
+                const lowerH = h.toLowerCase();
+                if (savedPrefs.exclusions && savedPrefs.exclusions.includes(h)) {
+                    checkbox.checked = true;
+                }
+                // 2. Auto-check common tax columns and user-specified exclusions as fallback
+                else if (['igst', 'cgst', 'sgst', 'tax', 'round', 'tds', 'gst reversal', 'voucher no', 'voucher ref', 'gross total'].some(keyword => lowerH.includes(keyword))) {
+                    checkbox.checked = true;
+                }
+
+                const span = document.createElement('span');
+                span.className = 'text-sm text-slate-700 truncate';
+                span.textContent = h;
+
+                wrapper.appendChild(checkbox);
+                wrapper.appendChild(span);
+                exclusionContainer.appendChild(wrapper);
+            });
+        }
+
+        btnGenerate.addEventListener('click', () => {
+            const newPrefs = { mappings: {}, exclusions: [] };
+            
+            // Get mappings and save preferences
+            const mapping = {};
+            document.querySelectorAll('.column-map-select').forEach(select => {
+                const val = select.value !== '' ? parseInt(select.value) : null;
+                mapping[select.dataset.target] = val;
+                
+                // Save mapping header name to prefs
+                if (val !== null) {
+                    newPrefs.mappings[select.dataset.target] = headers[val];
+                }
+            });
+
+            // Get Exclusions and save preferences
+            const exclusions = new Set();
+            document.querySelectorAll('.exclude-checkbox:checked').forEach(cb => {
+                const val = parseInt(cb.value);
+                exclusions.add(val);
+                
+                // Save excluded header name to prefs
+                newPrefs.exclusions.push(headers[val]);
+            });
+
+            // Commit preferences to LocalStorage
+            savedPrefs = newPrefs;
+            localStorage.setItem('tallyConverterPrefs', JSON.stringify(savedPrefs));
+
+            processedData = [];
+
+            const taxColumns = ["IGST", "CGST", "SGST", "Cess"];
+
+            // Process data rows
+            dataRows.forEach(row => {
+                const newRowObj = {};
+
+                // Map standard columns
+                requiredColumns.forEach(col => {
+                    const srcIndex = mapping[col];
+                    let cellValue = (srcIndex !== null && row[srcIndex] !== undefined) ? String(row[srcIndex]).trim() : '';
+                    
+                    // Invert sign for Tax columns (multiply by -1)
+                    if (taxColumns.includes(col) && cellValue !== '') {
+                        // Handle standard negatives, commas, and accounting formats like (123.45)
+                        let cleanStr = cellValue.replace(/,/g, '').trim();
+                        let isAccountingNegative = false;
+                        
+                        // Check if Tally exported the negative number wrapped in parentheses
+                        if (cleanStr.startsWith('(') && cleanStr.endsWith(')')) {
+                            isAccountingNegative = true;
+                            cleanStr = cleanStr.substring(1, cleanStr.length - 1);
+                        }
+                        
+                        let numVal = parseFloat(cleanStr);
+                        
+                        if (!isNaN(numVal)) {
+                            if (isAccountingNegative) numVal = -numVal; // Apply the parenthesis negative
+                            
+                            // Invert the sign as requested
+                            const invertedVal = numVal * -1;
+                            
+                            // Prevent '-0.00' visual artifact
+                            cellValue = (invertedVal === 0) ? "0.00" : invertedVal.toFixed(2);
+                        }
+                    }
+
+                    newRowObj[col] = cellValue;
+                });
+
+                // Calculate Taxable Value and Extract Expense Ledgers
+                // Logic: Sum all numbers in the row, EXCLUDING indices in the 'exclusions' set
+                let taxableValueSum = 0;
+                const expenseLedgers = [];
+                
+                row.forEach((cell, index) => {
+                    if (!exclusions.has(index)) {
+                        let cleanStr = String(cell).replace(/,/g, '').trim();
+                        // Handle accounting negative format (123.45)
+                        if (cleanStr.startsWith('(') && cleanStr.endsWith(')')) {
+                            cleanStr = cleanStr.substring(1, cleanStr.length - 1);
+                        }
+                        
+                        // Strict number check to avoid parsing dates or random text
+                        if (/^-?\d+(\.\d+)?$/.test(cleanStr)) {
+                            const numVal = parseFloat(cleanStr);
+                            if (numVal !== 0) {
+                                taxableValueSum += Math.abs(numVal);
+                                
+                                // Keep track of the ledger name contributing to the taxable value
+                                const headerName = headers[index] ? headers[index].trim() : '';
+                                if (headerName && !expenseLedgers.includes(headerName)) {
+                                    expenseLedgers.push(headerName);
+                                }
+                            }
+                        }
+                    }
+                });
+                
+                // Format taxable value to 2 decimal places
+                newRowObj["Taxable Value"] = taxableValueSum > 0 ? taxableValueSum.toFixed(2) : '';
+                newRowObj["Expense Ledger"] = expenseLedgers.join(', ');
+
+                // Auto-calculate Tax Rate and validate against standard GST rates
+                const igst = parseFloat(newRowObj["IGST"]) || 0;
+                const cgst = parseFloat(newRowObj["CGST"]) || 0;
+                const sgst = parseFloat(newRowObj["SGST"]) || 0;
+                const totalGST = igst + cgst + sgst;
+
+                let taxRateStr = "";
+                let isTaxError = false;
+
+                if (taxableValueSum > 0) {
+                    const calculatedRate = (totalGST / taxableValueSum) * 100;
+                    taxRateStr = calculatedRate.toFixed(2) + "%";
+                    
+                    // Standard GST rates in India
+                    const standardRates = [0, 0.1, 0.25, 1.5, 3, 5, 12, 18, 28];
+                    
+                    // Find the nearest standard rate
+                    const nearestRate = standardRates.reduce((prev, curr) => 
+                        Math.abs(curr - calculatedRate) < Math.abs(prev - calculatedRate) ? curr : prev
+                    );
+                    
+                    // Allow a 0.2% margin for minor rounding discrepancies in Tally data
+                    if (Math.abs(calculatedRate - nearestRate) > 0.2 && totalGST > 0) {
+                        isTaxError = true;
+                    }
+                } else if (totalGST > 0) {
+                    // Taxes exist but no taxable value found
+                    taxRateStr = "Error";
+                    isTaxError = true;
+                }
+
+                newRowObj["Tax Rate"] = taxRateStr;
+                newRowObj["_isTaxRateError"] = isTaxError; // Internal flag for highlighting
+
+                // SMART INFERENCE: If Trade/Legal name is blank, attempt to guess it
+                if (!newRowObj["Trade/Legal name"] || newRowObj["Trade/Legal name"].trim() === '') {
+                    // Gather all indices mapped to standard columns so we don't accidentally pick them
+                    const mappedIndices = Object.values(mapping).filter(i => i !== null);
+                    
+                    let maxAbsValue = -1;
+                    let inferredSupplier = '';
+
+                    row.forEach((cell, index) => {
+                        const headerName = headers[index] ? headers[index].trim() : '';
+                        
+                        // To be a party ledger, it must be EXCLUDED from Taxable Value, 
+                        // NOT mapped to standard fields (like tax or voucher), and not a generic 'Gross Total' column.
+                        if (exclusions.has(index) && 
+                            !mappedIndices.includes(index) && 
+                            headerName.toLowerCase() !== 'gross total' &&
+                            headerName !== '') {
+                            
+                            let cleanStr = String(cell).replace(/,/g, '').trim();
+                            if (cleanStr.startsWith('(') && cleanStr.endsWith(')')) {
+                                cleanStr = cleanStr.substring(1, cleanStr.length - 1);
+                            }
+                            
+                            // Strict number check
+                            if (/^-?\d+(\.\d+)?$/.test(cleanStr)) {
+                                const numVal = parseFloat(cleanStr);
+                                const absVal = Math.abs(numVal);
+                                // The ledger with the highest value is typically the Party/Supplier ledger
+                                if (absVal > maxAbsValue) {
+                                    maxAbsValue = absVal;
+                                    inferredSupplier = headerName;
+                                }
+                            }
+                        }
+                    });
+
+                    if (inferredSupplier) {
+                        newRowObj["Trade/Legal name"] = inferredSupplier;
+                    }
+                }
+
+                processedData.push(newRowObj);
+            });
+
+            renderPreview();
+            switchTab('step-4');
+        });
+
+        function renderPreview() {
+            // Render Head
+            previewHead.innerHTML = '';
+            const headTr = document.createElement('tr');
+            finalOrder.forEach(col => {
+                const th = document.createElement('th');
+                th.className = 'px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap';
+                th.textContent = col;
+                headTr.appendChild(th);
+            });
+            previewHead.appendChild(headTr);
+
+            // Render Body
+            previewBody.innerHTML = '';
+            // Show only first 50 rows in preview for performance
+            const previewRows = processedData.slice(0, 50);
+            
+            previewRows.forEach(rowObj => {
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-slate-50';
+                
+                finalOrder.forEach(col => {
+                    const td = document.createElement('td');
+                    td.className = 'px-4 py-2 text-sm text-slate-700 whitespace-nowrap';
+                    
+                    // Apply red highlight for tax rate errors
+                    if (col === "Tax Rate" && rowObj["_isTaxRateError"]) {
+                        td.className = 'px-4 py-2 text-sm whitespace-nowrap bg-red-100 text-red-700 font-bold border border-red-300 rounded';
+                    }
+
+                    td.textContent = rowObj[col];
+                    tr.appendChild(td);
+                });
+                previewBody.appendChild(tr);
+            });
+
+            rowCountDisplay.textContent = `Showing ${previewRows.length} of ${processedData.length} total rows.`;
+        }
+
+        btnDownload.addEventListener('click', () => {
+            if (processedData.length === 0) return;
+
+            // Create CSV string
+            const csvRows = [];
+            
+            // Header
+            csvRows.push(finalOrder.map(col => `"${col}"`).join(','));
+
+            // Data
+            processedData.forEach(rowObj => {
+                const values = finalOrder.map(col => {
+                    let val = rowObj[col] || '';
+                    // Escape quotes
+                    val = val.replace(/"/g, '""');
+                    return `"${val}"`;
+                });
+                csvRows.push(values.join(','));
+            });
+
+            const csvString = csvRows.join('\n');
+            const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+            
+            // Trigger download
+            const link = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            link.setAttribute("href", url);
+            link.setAttribute("download", "tally_invoices_converted.csv");
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,767 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reconciliation Tool</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
+        .tab-active { border-bottom: 2px solid #3b82f6; color: #1d4ed8; font-weight: 600; }
+        .tab-inactive { color: #6b7280; }
+        .tab-inactive:hover { color: #374151; }
+        
+        textarea::-webkit-scrollbar { width: 8px; }
+        textarea::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
+        textarea::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        textarea::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        [contenteditable="true"]:hover { background-color: #e5e7eb; border-radius: 4px; cursor: text; }
+        [contenteditable="true"]:focus { outline: 2px solid #3b82f6; background-color: white; border-radius: 4px; }
+        
+        .mode-active { background-color: #3b82f6; color: white; border-color: #3b82f6; }
+        .mode-inactive { background-color: white; color: #4b5563; border-color: #d1d5db; }
+    </style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden text-gray-800">
+
+    <header class="bg-white shadow-sm z-10 flex-shrink-0">
+        <div class="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex flex-wrap justify-between items-center py-4 border-b border-gray-200">
+                <div class="flex flex-col">
+                    <h1 class="text-2xl font-bold text-gray-900 flex items-center">
+                        <svg class="w-6 h-6 mr-2 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
+                        Recon Master Pro
+                    </h1>
+                    <span class="text-xs text-gray-500 mt-1 font-mono">Shortcuts: Alt+1, Alt+2, Alt+3 | Run: Ctrl+Enter</span>
+                </div>
+                <div class="flex items-center space-x-3 sm:space-x-4 mt-3 sm:mt-0">
+                    <label class="text-sm font-medium text-gray-700">Tolerance:</label>
+                    <input type="number" id="tolerance" value="0.00" step="0.01" class="w-24 px-2 py-1.5 border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500 text-right">
+                    <button onclick="showClearModal()" class="text-red-600 hover:text-red-800 text-sm font-medium bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded transition">Clear All</button>
+                </div>
+            </div>
+            
+            <nav class="flex space-x-6 sm:space-x-8 mt-2 overflow-x-auto" aria-label="Tabs">
+                <button onclick="switchTab('input')" id="tab-input" class="tab-active py-2 px-1 text-sm font-medium transition-colors whitespace-nowrap">1. Data Input</button>
+                <button onclick="switchTab('results')" id="tab-results" class="tab-inactive py-2 px-1 text-sm font-medium transition-colors whitespace-nowrap">2. Invoice Results</button>
+                <button onclick="switchTab('frequency')" id="tab-frequency" class="tab-inactive py-2 px-1 text-sm font-medium transition-colors whitespace-nowrap">3. Amount Frequencies</button>
+            </nav>
+        </div>
+    </header>
+
+    <main class="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 max-w-screen-2xl mx-auto w-full relative">
+        
+        <!-- Error Banner -->
+        <div id="errorBanner" class="hidden mb-4 bg-red-50 border-l-4 border-red-500 p-4 rounded shadow-sm">
+            <div class="flex">
+                <div class="flex-shrink-0"><svg class="h-5 w-5 text-red-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" /></svg></div>
+                <div class="ml-3"><p class="text-sm text-red-700 font-medium" id="errorMessage"></p></div>
+            </div>
+        </div>
+
+        <div id="view-input" class="block h-full flex flex-col">
+            
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-sm font-semibold text-gray-600 uppercase tracking-wider">Paste your data below</h2>
+                <div class="flex rounded-md shadow-sm" role="group">
+                    <button type="button" onclick="setInputMode('split')" id="btn-mode-split" class="mode-active px-4 py-1.5 text-sm font-medium border rounded-l-lg hover:bg-blue-600 hover:text-white transition">
+                        Split Columns
+                    </button>
+                    <button type="button" onclick="setInputMode('combined')" id="btn-mode-combined" class="mode-inactive px-4 py-1.5 text-sm font-medium border border-l-0 rounded-r-lg hover:bg-gray-50 transition">
+                        Combined (Excel Tabbed)
+                    </button>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6 flex-1 min-h-[400px]">
+                
+                <!-- Dataset 1 -->
+                <div class="bg-white rounded-lg shadow flex flex-col overflow-hidden border border-gray-200">
+                    <div class="bg-gray-50 px-4 py-3 border-b border-gray-200">
+                        <h2 id="nameData1" class="text-lg font-semibold text-blue-800 px-2 py-1 rounded hover:bg-gray-200 focus:bg-white focus:outline-blue-500 transition inline-block" contenteditable="true" title="Click to rename dataset">Data Set 1</h2>
+                    </div>
+                    
+                    <!-- Split Mode -->
+                    <div id="d1_wrap_split" class="flex-1 p-3 grid grid-cols-2 gap-3">
+                        <div class="flex flex-col h-full">
+                            <label class="text-xs font-semibold text-gray-500 mb-1">Invoice No</label>
+                            <textarea id="d1_inv" class="w-full flex-1 p-2 border border-gray-300 rounded resize-none focus:ring-blue-500 focus:border-blue-500 font-mono text-sm whitespace-pre" placeholder="Paste Invoices..."></textarea>
+                        </div>
+                        <div class="flex flex-col h-full">
+                            <label class="text-xs font-semibold text-gray-500 mb-1">Amount</label>
+                            <textarea id="d1_amt" class="w-full flex-1 p-2 border border-gray-300 rounded resize-none focus:ring-blue-500 focus:border-blue-500 font-mono text-sm whitespace-pre" placeholder="Paste Amounts..."></textarea>
+                        </div>
+                    </div>
+
+                    <!-- Combined Mode -->
+                    <div id="d1_wrap_combined" class="hidden flex-1 p-3 flex flex-col">
+                        <label class="text-xs font-semibold text-gray-500 mb-1">Paste 2 Columns directly from Excel (Invoice & Amount)</label>
+                        <textarea id="d1_combined" class="w-full flex-1 p-2 border border-gray-300 rounded resize-none focus:ring-blue-500 focus:border-blue-500 font-mono text-sm whitespace-pre" placeholder="INV-001    $1,000.00&#10;INV-002    $2,500.00"></textarea>
+                    </div>
+                </div>
+
+                <!-- Dataset 2 -->
+                <div class="bg-white rounded-lg shadow flex flex-col overflow-hidden border border-gray-200">
+                    <div class="bg-gray-50 px-4 py-3 border-b border-gray-200">
+                        <h2 id="nameData2" class="text-lg font-semibold text-purple-800 px-2 py-1 rounded hover:bg-gray-200 focus:bg-white focus:outline-purple-500 transition inline-block" contenteditable="true" title="Click to rename dataset">Data Set 2</h2>
+                    </div>
+                    
+                    <div id="d2_wrap_split" class="flex-1 p-3 grid grid-cols-2 gap-3">
+                        <div class="flex flex-col h-full">
+                            <label class="text-xs font-semibold text-gray-500 mb-1">Invoice No</label>
+                            <textarea id="d2_inv" class="w-full flex-1 p-2 border border-gray-300 rounded resize-none focus:ring-purple-500 focus:border-purple-500 font-mono text-sm whitespace-pre" placeholder="Paste Invoices..."></textarea>
+                        </div>
+                        <div class="flex flex-col h-full">
+                            <label class="text-xs font-semibold text-gray-500 mb-1">Amount</label>
+                            <textarea id="d2_amt" class="w-full flex-1 p-2 border border-gray-300 rounded resize-none focus:ring-purple-500 focus:border-purple-500 font-mono text-sm whitespace-pre" placeholder="Paste Amounts..."></textarea>
+                        </div>
+                    </div>
+
+                    <div id="d2_wrap_combined" class="hidden flex-1 p-3 flex flex-col">
+                        <label class="text-xs font-semibold text-gray-500 mb-1">Paste 2 Columns directly from Excel (Invoice & Amount)</label>
+                        <textarea id="d2_combined" class="w-full flex-1 p-2 border border-gray-300 rounded resize-none focus:ring-purple-500 focus:border-purple-500 font-mono text-sm whitespace-pre" placeholder="INV-001    $1,000.00&#10;INV-002    $2,500.00"></textarea>
+                    </div>
+                </div>
+
+                <!-- Dataset 3 (Optional) -->
+                <div class="bg-white rounded-lg shadow flex flex-col overflow-hidden border border-gray-200 border-dashed hover:border-solid hover:border-teal-300 transition-all">
+                    <div class="bg-gray-50 px-4 py-3 border-b border-gray-200 flex justify-between items-center">
+                        <h2 id="nameData3" class="text-lg font-semibold text-teal-800 px-2 py-1 rounded hover:bg-gray-200 focus:bg-white focus:outline-teal-500 transition inline-block" contenteditable="true" title="Click to rename dataset">Data Set 3 (Optional)</h2>
+                        <span class="text-xs text-gray-400 bg-white px-2 py-0.5 rounded border">Leave blank to ignore</span>
+                    </div>
+                    
+                    <div id="d3_wrap_split" class="flex-1 p-3 grid grid-cols-2 gap-3 opacity-80 focus-within:opacity-100 transition-opacity">
+                        <div class="flex flex-col h-full">
+                            <label class="text-xs font-semibold text-gray-500 mb-1">Invoice No</label>
+                            <textarea id="d3_inv" class="w-full flex-1 p-2 border border-gray-300 rounded resize-none focus:ring-teal-500 focus:border-teal-500 font-mono text-sm whitespace-pre" placeholder="Paste Invoices..."></textarea>
+                        </div>
+                        <div class="flex flex-col h-full">
+                            <label class="text-xs font-semibold text-gray-500 mb-1">Amount</label>
+                            <textarea id="d3_amt" class="w-full flex-1 p-2 border border-gray-300 rounded resize-none focus:ring-teal-500 focus:border-teal-500 font-mono text-sm whitespace-pre" placeholder="Paste Amounts..."></textarea>
+                        </div>
+                    </div>
+
+                    <div id="d3_wrap_combined" class="hidden flex-1 p-3 flex flex-col opacity-80 focus-within:opacity-100 transition-opacity">
+                        <label class="text-xs font-semibold text-gray-500 mb-1">Paste 2 Columns directly from Excel (Invoice & Amount)</label>
+                        <textarea id="d3_combined" class="w-full flex-1 p-2 border border-gray-300 rounded resize-none focus:ring-teal-500 focus:border-teal-500 font-mono text-sm whitespace-pre" placeholder="INV-001    $1,000.00&#10;INV-002    $2,500.00"></textarea>
+                    </div>
+                </div>
+
+            </div>
+            
+            <div class="mt-6 flex justify-center pb-4">
+                <button id="runBtn" onclick="runReconciliation()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-10 rounded-lg shadow-lg transform transition hover:-translate-y-0.5 flex items-center">
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    Run Reconciliation (Ctrl+Enter)
+                </button>
+            </div>
+        </div>
+
+        <div id="view-results" class="hidden h-full flex flex-col pb-4">
+            <div class="bg-white rounded-lg shadow border border-gray-200 flex-1 flex flex-col overflow-hidden">
+                <div class="px-6 py-4 border-b border-gray-200 bg-gray-50 flex flex-wrap justify-between items-center gap-4">
+                    <div class="flex items-center space-x-4">
+                        <h2 class="text-lg font-medium text-gray-900">Invoice Reconciliation</h2>
+                        <select id="filterResults" onchange="renderInvoiceTable()" class="text-sm border-gray-300 rounded-md shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 py-1.5 px-3">
+                            <option value="diff">Show Differences Only</option>
+                            <option value="all">Show All Invoices</option>
+                        </select>
+                    </div>
+                    <button onclick="copyInvoiceResults()" class="text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 py-1.5 px-4 rounded border border-gray-300 transition flex items-center">
+                        <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path></svg>
+                        Copy for Excel
+                    </button>
+                </div>
+                
+                <div class="flex-1 overflow-auto bg-white relative">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50 sticky top-0 shadow-sm z-10">
+                            <tr>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Invoice No</th>
+                                <th scope="col" id="colHead1" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Data 1</th>
+                                <th scope="col" id="colHead2" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Data 2</th>
+                                <th scope="col" id="colHead3" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider hidden">Data 3</th>
+                                <th scope="col" id="colHeadDiff" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Difference</th>
+                            </tr>
+                        </thead>
+                        <tbody id="resultsBody" class="bg-white divide-y divide-gray-200">
+                            <tr><td colspan="5" class="px-6 py-12 text-center text-gray-500 italic">Run reconciliation to see results.</td></tr>
+                        </tbody>
+                        <tfoot class="bg-gray-50 sticky bottom-0 border-t border-gray-200 font-semibold shadow-sm z-10">
+                            <tr>
+                                <td class="px-6 py-4 text-left text-gray-900">TOTAL</td>
+                                <td class="px-6 py-4 text-right text-gray-900" id="totD1">0.00</td>
+                                <td class="px-6 py-4 text-right text-gray-900" id="totD2">0.00</td>
+                                <td class="px-6 py-4 text-right text-gray-900 hidden" id="totD3">0.00</td>
+                                <td class="px-6 py-4 text-right text-gray-900" id="totDiff">0.00</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div id="view-frequency" class="hidden h-full flex flex-col pb-4">
+            <div class="bg-white rounded-lg shadow border border-gray-200 flex-1 flex flex-col overflow-hidden">
+                <div class="px-6 py-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
+                    <h2 class="text-lg font-medium text-gray-900">Amount Frequencies</h2>
+                    <button onclick="copyAmountResults()" class="text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 py-1.5 px-4 rounded border border-gray-300 transition flex items-center">
+                        <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path></svg>
+                        Copy Frequencies
+                    </button>
+                </div>
+                
+                <div class="flex-1 overflow-auto bg-white">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50 sticky top-0 shadow-sm z-10">
+                            <tr>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                                <th scope="col" id="freqHead1" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">D1 Freq</th>
+                                <th scope="col" id="freqHead2" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">D2 Freq</th>
+                                <th scope="col" id="freqHead3" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider hidden">D3 Freq</th>
+                                <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="frequencyBody" class="bg-white divide-y divide-gray-200">
+                            <tr><td colspan="5" class="px-6 py-12 text-center text-gray-500 italic">Run reconciliation to see frequency analysis.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <div id="clearModal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 overflow-y-auto h-full w-full z-50 flex items-center justify-center">
+        <div class="relative mx-auto p-5 border w-96 shadow-xl rounded-md bg-white transform transition-all">
+            <div class="mt-3 text-center">
+                <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4">
+                    <svg class="h-6 w-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                </div>
+                <h3 class="text-lg leading-6 font-medium text-gray-900">Clear All Data?</h3>
+                <div class="mt-2 px-2 py-3">
+                    <p class="text-sm text-gray-500">This will completely erase all pasted datasets and results. This action cannot be undone.</p>
+                </div>
+                <div class="px-2 py-3 mt-4 flex justify-between space-x-4">
+                    <button onclick="hideClearModal()" class="px-4 py-2 bg-white text-gray-700 text-sm font-medium rounded-md w-full border border-gray-300 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-200">Cancel</button>
+                    <button onclick="executeClearAll()" class="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-md w-full border border-transparent hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500">Clear Data</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables to store processed data
+        window.masterInvoiceList = [];
+        window.masterFrequencyList = [];
+        window.currentTolerance = 0;
+        window.is3Way = false;
+        window.currentMode = 'split'; // 'split' or 'combined'
+
+        // Keyboard Shortcuts
+        document.addEventListener('keydown', function(e) {
+            // Check if user is typing in a contenteditable header to avoid breaking their typing
+            if (e.target.getAttribute('contenteditable') === 'true') return;
+
+            if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); runReconciliation(); }
+            if (e.altKey && e.key === '1') { e.preventDefault(); switchTab('input'); }
+            if (e.altKey && e.key === '2') { e.preventDefault(); switchTab('results'); }
+            if (e.altKey && e.key === '3') { e.preventDefault(); switchTab('frequency'); }
+        });
+
+        // Toggle Input Modes
+        function setInputMode(mode) {
+            window.currentMode = mode;
+            const btnSplit = document.getElementById('btn-mode-split');
+            const btnCombined = document.getElementById('btn-mode-combined');
+            
+            if (mode === 'split') {
+                btnSplit.className = "mode-active px-4 py-1.5 text-sm font-medium border rounded-l-lg transition";
+                btnCombined.className = "mode-inactive px-4 py-1.5 text-sm font-medium border border-l-0 rounded-r-lg transition hover:bg-gray-50";
+            } else {
+                btnCombined.className = "mode-active px-4 py-1.5 text-sm font-medium border border-l-0 rounded-r-lg transition";
+                btnSplit.className = "mode-inactive px-4 py-1.5 text-sm font-medium border rounded-l-lg transition hover:bg-gray-50";
+            }
+
+            // Toggle Visibility for D1, D2, D3
+            [1, 2, 3].forEach(num => {
+                document.getElementById(`d${num}_wrap_split`).style.display = mode === 'split' ? 'grid' : 'none';
+                document.getElementById(`d${num}_wrap_combined`).style.display = mode === 'combined' ? 'flex' : 'none';
+            });
+        }
+
+        // Tab Navigation
+        function switchTab(tabName) {
+            ['input', 'results', 'frequency'].forEach(t => {
+                document.getElementById(`view-${t}`).classList.add('hidden');
+                document.getElementById(`tab-${t}`).className = 'tab-inactive py-2 px-1 text-sm font-medium transition-colors whitespace-nowrap';
+            });
+            document.getElementById(`view-${tabName}`).classList.remove('hidden');
+            document.getElementById(`tab-${tabName}`).className = 'tab-active py-2 px-1 text-sm font-medium transition-colors whitespace-nowrap';
+        }
+
+        // Modal Helpers
+        function showClearModal() { document.getElementById('clearModal').classList.remove('hidden'); }
+        function hideClearModal() { document.getElementById('clearModal').classList.add('hidden'); }
+        
+        function showError(msg) {
+            const banner = document.getElementById('errorBanner');
+            document.getElementById('errorMessage').innerText = msg;
+            banner.classList.remove('hidden');
+            setTimeout(() => { banner.classList.add('hidden'); }, 7000);
+        }
+
+        function executeClearAll() {
+            ['d1', 'd2', 'd3'].forEach(pref => {
+                document.getElementById(`${pref}_inv`).value = '';
+                document.getElementById(`${pref}_amt`).value = '';
+                document.getElementById(`${pref}_combined`).value = '';
+            });
+            
+            document.getElementById('resultsBody').innerHTML = '<tr><td colspan="5" class="px-6 py-12 text-center text-gray-500 italic">Data cleared. Ready for input.</td></tr>';
+            document.getElementById('frequencyBody').innerHTML = '<tr><td colspan="5" class="px-6 py-12 text-center text-gray-500 italic">Data cleared. Ready for input.</td></tr>';
+            ['totD1', 'totD2', 'totD3', 'totDiff'].forEach(id => document.getElementById(id).innerText = '0.00');
+            
+            document.getElementById('nameData1').textContent = 'Data Set 1';
+            document.getElementById('nameData2').textContent = 'Data Set 2';
+            document.getElementById('nameData3').textContent = 'Data Set 3 (Optional)';
+            
+            window.masterInvoiceList = [];
+            window.masterFrequencyList = [];
+            hideClearModal();
+            switchTab('input');
+        }
+
+        function extractSafeNumber(valStr) {
+            if (valStr === undefined || valStr === null) return 0;
+            let str = String(valStr).trim();
+            if (str === '') return 0;
+
+            let isNegative = false;
+            if (str.startsWith('(') && str.endsWith(')')) {
+                isNegative = true;
+                str = str.slice(1, -1);
+            } else if (str.startsWith('-')) {
+                isNegative = true;
+                str = str.substring(1);
+            }
+
+            // Strip everything except numbers, decimal point
+            str = str.replace(/[^0-9.]/g, '');
+            let parsed = parseFloat(str);
+            if (isNaN(parsed)) return 0;
+            return isNegative ? -parsed : parsed;
+        }
+
+        function getTextLines(id) {
+            let val = document.getElementById(id).value;
+            let lines = val.split(/\r?\n/);
+            while (lines.length > 0 && lines[lines.length - 1].trim() === '') {
+                lines.pop();
+            }
+            return lines;
+        }
+
+        // Checks if a dataset actually has user content
+        function isDatasetActive(datasetNum) {
+            if (window.currentMode === 'split') {
+                return document.getElementById(`d${datasetNum}_inv`).value.trim() !== '' || 
+                       document.getElementById(`d${datasetNum}_amt`).value.trim() !== '';
+            } else {
+                return document.getElementById(`d${datasetNum}_combined`).value.trim() !== '';
+            }
+        }
+
+        // Main data builder based on mode
+        function buildDataMap(datasetNum) {
+            let dataMap = {};
+            
+            if (window.currentMode === 'split') {
+                let invLines = getTextLines(`d${datasetNum}_inv`);
+                let amtLines = getTextLines(`d${datasetNum}_amt`);
+                let maxLines = Math.max(invLines.length, amtLines.length);
+
+                for (let i = 0; i < maxLines; i++) {
+                    let invoice = (invLines[i] || '').trim();
+                    let amountStr = amtLines[i] || '';
+                    if (invoice === '' && amountStr.trim() === '') continue; 
+                    if (invoice === '') invoice = `Line_${i+1}`;  
+                    
+                    let amount = extractSafeNumber(amountStr);
+                    dataMap[invoice] = (dataMap[invoice] || 0) + amount;
+                }
+            } else {
+                // Combined Mode (Tab separated from Excel)
+                let lines = getTextLines(`d${datasetNum}_combined`);
+                for (let i = 0; i < lines.length; i++) {
+                    let line = lines[i].trim();
+                    if (line === '') continue;
+                    
+                    // Split by tab or multiple spaces
+                    let parts = line.split(/\t+/);
+                    if (parts.length === 1) {
+                        // Attempt space split if tab fails (in case they typed it manually)
+                        let spaceParts = line.split(/\s{2,}/);
+                        if (spaceParts.length > 1) parts = spaceParts;
+                    }
+
+                    let invoice = '';
+                    let amountStr = '';
+
+                    if (parts.length >= 2) {
+                        invoice = parts[0].trim();
+                        // Assume last part is amount
+                        amountStr = parts[parts.length - 1].trim(); 
+                    } else {
+                        // Only one item pasted, guess if it's a number
+                        let val = extractSafeNumber(parts[0]);
+                        if (val !== 0) {
+                            invoice = `Line_${i+1}`;
+                            amountStr = parts[0];
+                        } else {
+                            invoice = parts[0];
+                            amountStr = '0';
+                        }
+                    }
+
+                    if (invoice === '') invoice = `Line_${i+1}`;
+                    let amount = extractSafeNumber(amountStr);
+                    dataMap[invoice] = (dataMap[invoice] || 0) + amount;
+                }
+            }
+            return dataMap;
+        }
+
+        function buildAmountArray(datasetNum) {
+            let amounts = [];
+            if (window.currentMode === 'split') {
+                let lines = getTextLines(`d${datasetNum}_amt`);
+                for (let i = 0; i < lines.length; i++) {
+                    if (lines[i].trim() !== '') amounts.push(extractSafeNumber(lines[i]));
+                }
+            } else {
+                let lines = getTextLines(`d${datasetNum}_combined`);
+                for (let i = 0; i < lines.length; i++) {
+                    let line = lines[i].trim();
+                    if (line === '') continue;
+                    let parts = line.split(/\t+/);
+                    if (parts.length === 1) parts = line.split(/\s{2,}/);
+                    
+                    let valStr = parts.length >= 2 ? parts[parts.length - 1] : parts[0];
+                    amounts.push(extractSafeNumber(valStr));
+                }
+            }
+            return amounts;
+        }
+
+        function runReconciliation() {
+            const btn = document.getElementById('runBtn');
+            const originalBtnHtml = btn.innerHTML;
+            btn.innerHTML = 'Processing...';
+
+            setTimeout(() => {
+                try {
+                    window.currentTolerance = parseFloat(document.getElementById('tolerance').value) || 0;
+                    window.is3Way = isDatasetActive(3);
+
+                    const n1 = document.getElementById('nameData1').textContent.trim() || "Data 1";
+                    const n2 = document.getElementById('nameData2').textContent.trim() || "Data 2";
+                    const n3 = document.getElementById('nameData3').textContent.trim().replace(' (Optional)', '') || "Data 3";
+
+                    // Update UI Headers dynamically
+                    document.getElementById('colHead1').textContent = n1;
+                    document.getElementById('colHead2').textContent = n2;
+                    document.getElementById('freqHead1').textContent = `${n1} Freq`;
+                    document.getElementById('freqHead2').textContent = `${n2} Freq`;
+                    
+                    if (window.is3Way) {
+                        document.getElementById('colHead3').textContent = n3;
+                        document.getElementById('freqHead3').textContent = `${n3} Freq`;
+                        document.getElementById('colHead3').classList.remove('hidden');
+                        document.getElementById('totD3').classList.remove('hidden');
+                        document.getElementById('freqHead3').classList.remove('hidden');
+                        document.getElementById('colHeadDiff').textContent = 'Variance (Max Diff)';
+                    } else {
+                        document.getElementById('colHead3').classList.add('hidden');
+                        document.getElementById('totD3').classList.add('hidden');
+                        document.getElementById('freqHead3').classList.add('hidden');
+                        document.getElementById('colHeadDiff').textContent = 'Difference (D1-D2)';
+                    }
+
+                    // --- PHASE 1: Invoice Level Reconciliation ---
+                    const data1 = buildDataMap(1);
+                    const data2 = buildDataMap(2);
+                    const data3 = window.is3Way ? buildDataMap(3) : {};
+                    
+                    let keys = [...Object.keys(data1), ...Object.keys(data2)];
+                    if (window.is3Way) keys = keys.concat(Object.keys(data3));
+                    const allInvoices = new Set(keys);
+
+                    window.masterInvoiceList = [];
+                    let tD1 = 0, tD2 = 0, tD3 = 0, tDiff = 0;
+
+                    allInvoices.forEach(inv => {
+                        let v1 = data1[inv] || 0;
+                        let v2 = data2[inv] || 0;
+                        let v3 = data3[inv] || 0;
+                        
+                        let diff = 0;
+                        if (window.is3Way) {
+                            let maxV = Math.max(v1, v2, v3);
+                            let minV = Math.min(v1, v2, v3);
+                            diff = maxV - minV;
+                        } else {
+                            diff = v1 - v2;
+                        }
+
+                        tD1 += v1;
+                        tD2 += v2;
+                        tD3 += v3;
+                        
+                        // For total diff, just sum the row diffs (variance)
+                        tDiff += window.is3Way ? diff : diff; 
+
+                        window.masterInvoiceList.push({ invoice: inv, v1: v1, v2: v2, v3: v3, diff: diff });
+                    });
+
+                    window.masterInvoiceList.sort((a, b) => a.invoice.localeCompare(b.invoice, undefined, {numeric: true, sensitivity: 'base'}));
+
+                    // Update Totals Footer
+                    document.getElementById('totD1').textContent = tD1.toFixed(2);
+                    document.getElementById('totD2').textContent = tD2.toFixed(2);
+                    if (window.is3Way) document.getElementById('totD3').textContent = tD3.toFixed(2);
+                    
+                    if (!window.is3Way) {
+                        tDiff = tD1 - tD2; // True absolute bottom line diff for 2-way
+                    }
+                    
+                    const diffEl = document.getElementById('totDiff');
+                    diffEl.textContent = tDiff.toFixed(2);
+                    diffEl.className = Math.abs(tDiff) > 0.001 ? "px-6 py-4 text-right text-red-600 font-bold" : "px-6 py-4 text-right text-green-600 font-bold";
+
+                    renderInvoiceTable();
+
+                    // --- PHASE 2: Amount Frequency Analysis ---
+                    let arr1 = buildAmountArray(1).sort((a, b) => a - b);
+                    let arr2 = buildAmountArray(2).sort((a, b) => a - b);
+                    let arr3 = window.is3Way ? buildAmountArray(3).sort((a, b) => a - b) : [];
+                    
+                    let matchedPairs = [];
+                    let remainingD2 = [...arr2];
+                    let remainingD3 = [...arr3];
+
+                    // Process Arr 1
+                    for (let i = 0; i < arr1.length; i++) {
+                        let v1 = arr1[i];
+                        let f2 = 0, f3 = 0;
+
+                        // Check D2
+                        for (let j = 0; j < remainingD2.length; j++) {
+                            if (Math.abs(v1 - remainingD2[j]) <= window.currentTolerance) {
+                                f2 = 1; remainingD2.splice(j, 1); break;
+                            }
+                        }
+                        // Check D3
+                        if (window.is3Way) {
+                            for (let k = 0; k < remainingD3.length; k++) {
+                                if (Math.abs(v1 - remainingD3[k]) <= window.currentTolerance) {
+                                    f3 = 1; remainingD3.splice(k, 1); break;
+                                }
+                            }
+                        }
+                        matchedPairs.push({ amount: v1, f1: 1, f2: f2, f3: f3 });
+                    }
+                    
+                    // Process remaining Arr 2
+                    for (let j = 0; j < remainingD2.length; j++) {
+                        let v2 = remainingD2[j];
+                        let f3 = 0;
+                        if (window.is3Way) {
+                            for (let k = 0; k < remainingD3.length; k++) {
+                                if (Math.abs(v2 - remainingD3[k]) <= window.currentTolerance) {
+                                    f3 = 1; remainingD3.splice(k, 1); break;
+                                }
+                            }
+                        }
+                        matchedPairs.push({ amount: v2, f1: 0, f2: 1, f3: f3 });
+                    }
+
+                    // Process remaining Arr 3
+                    for (let k = 0; k < remainingD3.length; k++) {
+                        matchedPairs.push({ amount: remainingD3[k], f1: 0, f2: 0, f3: 1 });
+                    }
+
+                    // Group exactly identical keys to show frequency count
+                    let groupedFrequencies = {};
+                    matchedPairs.forEach(item => {
+                        let key = item.amount.toFixed(2); 
+                        if (!groupedFrequencies[key]) {
+                            groupedFrequencies[key] = { amount: item.amount, f1: 0, f2: 0, f3: 0 };
+                        }
+                        groupedFrequencies[key].f1 += item.f1;
+                        groupedFrequencies[key].f2 += item.f2;
+                        groupedFrequencies[key].f3 += item.f3;
+                    });
+
+                    window.masterFrequencyList = Object.values(groupedFrequencies)
+                        .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
+
+                    renderFrequencyTable();
+                    switchTab('results');
+
+                } catch (err) {
+                    console.error("Reconciliation Error: ", err);
+                    showError("Failed to parse data. Please check for weird formatting. Error: " + err.message);
+                } finally {
+                    btn.innerHTML = originalBtnHtml; 
+                }
+            }, 50);
+        }
+
+        function renderInvoiceTable() {
+            const filterMode = document.getElementById('filterResults').value;
+            let tbody = '';
+            let displayedCount = 0;
+
+            window.masterInvoiceList.forEach(row => {
+                let isDifference = Math.abs(row.diff) > window.currentTolerance;
+                if (filterMode === 'diff' && !isDifference) return;
+
+                displayedCount++;
+                let diffStyle = isDifference ? 'text-red-600 font-semibold bg-red-50' : 'text-gray-500';
+                
+                let col3HTML = window.is3Way ? `<td class="px-6 py-2 whitespace-nowrap text-sm text-gray-500 text-right">${row.v3.toFixed(2)}</td>` : '';
+
+                tbody += `
+                    <tr class="hover:bg-blue-50 border-b border-gray-100">
+                        <td class="px-6 py-2 whitespace-nowrap text-sm font-medium text-gray-900">${row.invoice}</td>
+                        <td class="px-6 py-2 whitespace-nowrap text-sm text-gray-500 text-right">${row.v1.toFixed(2)}</td>
+                        <td class="px-6 py-2 whitespace-nowrap text-sm text-gray-500 text-right">${row.v2.toFixed(2)}</td>
+                        ${col3HTML}
+                        <td class="px-6 py-2 whitespace-nowrap text-sm text-right ${diffStyle}">${row.diff.toFixed(2)}</td>
+                    </tr>
+                `;
+            });
+
+            if (window.masterInvoiceList.length === 0) {
+                tbody = `<tr><td colspan="${window.is3Way ? 5 : 4}" class="px-6 py-12 text-center text-gray-500 italic">No data to display. Please input data first.</td></tr>`;
+            } else if (displayedCount === 0) {
+                tbody = `
+                    <tr><td colspan="${window.is3Way ? 5 : 4}" class="px-6 py-16 text-center bg-green-50 border-b border-green-100">
+                        <div class="flex flex-col items-center justify-center">
+                            <svg class="h-12 w-12 text-green-500 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                            <span class="text-green-800 font-bold text-xl">Perfect Match!</span>
+                            <span class="text-green-600 mt-2">All data successfully reconciled within tolerance.</span>
+                            <button onclick="document.getElementById('filterResults').value='all'; renderInvoiceTable();" class="mt-4 text-sm bg-white border border-green-300 text-green-700 hover:bg-green-100 py-1.5 px-4 rounded transition shadow-sm">View Matched Rows</button>
+                        </div>
+                    </td></tr>`;
+            }
+
+            document.getElementById('resultsBody').innerHTML = tbody;
+        }
+
+        function renderFrequencyTable() {
+            let fBody = '';
+            if (window.masterFrequencyList.length === 0) {
+                fBody = `<tr><td colspan="${window.is3Way ? 5 : 4}" class="px-6 py-12 text-center text-gray-500 italic">No valid amounts found to analyze.</td></tr>`;
+            } else {
+                window.masterFrequencyList.forEach(grp => {
+                    let isBalanced = window.is3Way ? (grp.f1 === grp.f2 && grp.f2 === grp.f3) : (grp.f1 === grp.f2);
+                    
+                    let badge = isBalanced 
+                        ? `<span class="px-2.5 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800 border border-green-200">Balanced</span>`
+                        : `<span class="px-2.5 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800 border border-red-200">Unbalanced</span>`;
+
+                    let col3HTML = window.is3Way ? `<td class="px-6 py-2 whitespace-nowrap text-sm ${grp.f3===0?'text-gray-300':'text-gray-700 font-medium'} text-center">${grp.f3}</td>` : '';
+                    let rowBg = isBalanced ? 'hover:bg-gray-50' : 'bg-red-50 hover:bg-red-100';
+
+                    fBody += `
+                        <tr class="${rowBg} border-b border-gray-100">
+                            <td class="px-6 py-2 whitespace-nowrap text-sm font-medium text-gray-900">~ ${grp.amount.toFixed(2)}</td>
+                            <td class="px-6 py-2 whitespace-nowrap text-sm ${grp.f1===0?'text-gray-300':'text-gray-700 font-medium'} text-center">${grp.f1}</td>
+                            <td class="px-6 py-2 whitespace-nowrap text-sm ${grp.f2===0?'text-gray-300':'text-gray-700 font-medium'} text-center">${grp.f2}</td>
+                            ${col3HTML}
+                            <td class="px-6 py-2 whitespace-nowrap text-center">${badge}</td>
+                        </tr>
+                    `;
+                });
+            }
+            document.getElementById('frequencyBody').innerHTML = fBody;
+        }
+
+        function executeCopy(textData, buttonSelector) {
+            const tempTextArea = document.createElement("textarea");
+            tempTextArea.value = textData;
+            document.body.appendChild(tempTextArea);
+            tempTextArea.select();
+            try {
+                document.execCommand('copy');
+                const btn = document.querySelector(buttonSelector);
+                if (btn) {
+                    const origHtml = btn.innerHTML;
+                    btn.innerHTML = `<svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> Copied!`;
+                    btn.classList.add('bg-green-100', 'text-green-800', 'border-green-300');
+                    setTimeout(() => { 
+                        btn.innerHTML = origHtml; 
+                        btn.classList.remove('bg-green-100', 'text-green-800', 'border-green-300');
+                    }, 2000);
+                }
+            } catch (err) {
+                console.error('Failed to copy', err);
+                alert("Browser blocked auto-copy. Please select and copy manually.");
+            }
+            document.body.removeChild(tempTextArea);
+        }
+
+        function copyInvoiceResults() {
+            if (!window.masterInvoiceList.length) return;
+            let n1 = document.getElementById('nameData1').textContent.trim();
+            let n2 = document.getElementById('nameData2').textContent.trim();
+            let n3 = document.getElementById('nameData3').textContent.trim().replace(' (Optional)', '');
+            const filterMode = document.getElementById('filterResults').value;
+            
+            let tsv = window.is3Way 
+                ? `Invoice No\t${n1}\t${n2}\t${n3}\tVariance\n`
+                : `Invoice No\t${n1}\t${n2}\tDifference\n`;
+
+            window.masterInvoiceList.forEach(r => {
+                let isDifference = Math.abs(r.diff) > window.currentTolerance;
+                if (filterMode === 'diff' && !isDifference) return;
+                
+                if (window.is3Way) {
+                    tsv += `${r.invoice}\t${r.v1.toFixed(2)}\t${r.v2.toFixed(2)}\t${r.v3.toFixed(2)}\t${r.diff.toFixed(2)}\n`;
+                } else {
+                    tsv += `${r.invoice}\t${r.v1.toFixed(2)}\t${r.v2.toFixed(2)}\t${r.diff.toFixed(2)}\n`;
+                }
+            });
+            executeCopy(tsv, 'button[onclick="copyInvoiceResults()"]');
+        }
+
+        function copyAmountResults() {
+            if (!window.masterFrequencyList.length) return;
+            let n1 = document.getElementById('nameData1').textContent.trim();
+            let n2 = document.getElementById('nameData2').textContent.trim();
+            let n3 = document.getElementById('nameData3').textContent.trim().replace(' (Optional)', '');
+
+            let tsv = window.is3Way
+                ? `Amount\t${n1} Freq\t${n2} Freq\t${n3} Freq\tStatus\n`
+                : `Amount\t${n1} Freq\t${n2} Freq\tStatus\n`;
+
+            window.masterFrequencyList.forEach(r => {
+                let status = window.is3Way 
+                    ? (r.f1 === r.f2 && r.f2 === r.f3 ? "Balanced" : "Unbalanced")
+                    : (r.f1 === r.f2 ? "Balanced" : "Unbalanced");
+                    
+                if (window.is3Way) {
+                    tsv += `${r.amount.toFixed(2)}\t${r.f1}\t${r.f2}\t${r.f3}\t${status}\n`;
+                } else {
+                    tsv += `${r.amount.toFixed(2)}\t${r.f1}\t${r.f2}\t${status}\n`;
+                }
+            });
+            executeCopy(tsv, 'button[onclick="copyAmountResults()"]');
+        }
+    </script>
+</body>
+</html>

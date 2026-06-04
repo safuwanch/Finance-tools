@@ -1,0 +1,1266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Uber Payment Statement Breakdown</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
+        .tree-line { border-left: 2px solid #e5e7eb; margin-left: 11px; padding-left: 16px; }
+        .node-hover:hover { background-color: #f9fafb; }
+        .node-active { background-color: #eff6ff; border-color: #3b82f6; }
+        .node-active .text-gray-700 { color: #1d4ed8; font-weight: 600; }
+        
+        /* Custom scrollbar for tree view */
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 10px; }
+    </style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden text-gray-800">
+
+    <!-- Header -->
+    <header class="bg-black text-white p-5 shadow-md flex-shrink-0">
+        <div class="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div class="flex items-center gap-3">
+                <svg class="w-8 h-8 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                <div>
+                    <h1 class="text-xl font-bold">Interactive Uber Statement Decoder</h1>
+                    <p class="text-xs text-gray-400 mt-1">Paste statement totals below to audit and see the distribution mapped dynamically.</p>
+                </div>
+            </div>
+            <div class="text-xs text-right bg-gray-800 border border-gray-700 rounded px-3 py-1.5 self-start md:self-center">
+                <span class="text-gray-400">Currency Notation:</span> Supports Indian Lakh System (e.g., 9,52,404) & standard formats.
+            </div>
+        </div>
+    </header>
+
+    <!-- Main View with Tabs -->
+    <div class="bg-gray-100 border-b border-gray-200 px-6 py-2 flex-shrink-0 flex gap-4">
+        <button id="tab-input-btn" onclick="switchTab('input')" class="text-sm font-semibold px-4 py-2 border-b-2 border-blue-600 text-blue-600 transition-all">
+            Data Input
+        </button>
+        <button id="tab-tree-btn" onclick="switchTab('tree')" class="text-sm font-semibold px-4 py-2 border-b-2 border-transparent text-gray-500 hover:text-gray-800 transition-all">
+            Interactive Tree View
+        </button>
+        <button id="tab-audit-btn" onclick="switchTab('audit')" class="text-sm font-semibold px-4 py-2 border-b-2 border-transparent text-gray-500 hover:text-gray-800 transition-all">
+            Instant Audit Report
+        </button>
+    </div>
+
+    <!-- Main Content -->
+    <main class="flex-1 max-w-7xl mx-auto w-full flex flex-col md:flex-row overflow-hidden">
+        
+        <!-- Tab 0: Left Pane (Data Input) -->
+        <div id="view-input" class="w-full md:w-3/5 bg-white border-r border-gray-200 overflow-y-auto custom-scrollbar p-6 flex flex-col">
+            <div class="border-b pb-4 mb-6">
+                <h2 class="text-xl font-bold text-gray-800">Paste Statement Data</h2>
+                <p class="text-sm text-gray-500 mt-1">Paste your raw statement rows here to begin analysis.</p>
+            </div>
+            
+            <div class="flex flex-col gap-4">
+                <div class="flex justify-between items-center">
+                    <label class="block text-sm font-semibold text-gray-700">Raw Data:</label>
+                    <button onclick="loadSample()" class="text-xs font-semibold text-blue-600 hover:text-blue-800 transition-colors">Load Your Sample Data</button>
+                </div>
+                <textarea id="raw-input" class="w-full h-48 p-4 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none font-mono placeholder-gray-400" 
+                          placeholder="Paste data rows here... (Tip: Copied directly from spreadsheet or tab-separated text works perfectly!)"></textarea>
+                <button onclick="processData()" class="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded shadow transition-all flex items-center justify-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+                    Parse & Map Distribution
+                </button>
+                <div id="parse-status" class="hidden text-sm py-2 px-3 rounded font-medium text-center"></div>
+            </div>
+        </div>
+
+        <!-- Tab 1: Left Pane (Tree View) -->
+        <div id="view-tree" class="hidden w-full md:w-3/5 bg-white border-r border-gray-200 overflow-y-auto custom-scrollbar p-6 flex flex-col">
+            <div class="flex justify-between items-center mb-2 border-b pb-2 flex-shrink-0">
+                <h2 class="text-lg font-semibold text-gray-700">Calculated Distribution</h2>
+                <div class="flex items-center gap-2 text-xs">
+                    <span class="inline-block w-3 h-3 bg-green-100 border border-green-300 rounded"></span> <span class="text-gray-500 mr-2">Addition</span>
+                    <span class="inline-block w-3 h-3 bg-red-100 border border-red-300 rounded"></span> <span class="text-gray-500">Deduction</span>
+                </div>
+            </div>
+            <!-- Checkbox toolbar -->
+            <div id="checkbox-toolbar" class="hidden mb-3 flex-shrink-0 bg-gray-50 border border-gray-200 rounded-xl p-2.5 space-y-2">
+                <!-- Row 1: totals side by side -->
+                <div class="grid grid-cols-2 gap-2">
+                    <!-- Selected -->
+                    <div class="flex flex-col bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+                        <div class="flex items-center gap-1.5 mb-0.5">
+                            <svg class="w-3.5 h-3.5 text-blue-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                            <span class="text-xs text-blue-600 font-semibold uppercase tracking-wide">Selected</span>
+                            <span id="checkbox-item-count" class="text-xs text-blue-400 ml-auto"></span>
+                        </div>
+                        <span id="checkbox-total-value" class="text-base font-bold font-mono text-blue-800">—</span>
+                    </div>
+                    <!-- Unselected -->
+                    <div class="flex flex-col bg-gray-100 border border-gray-300 rounded-lg px-3 py-2">
+                        <div class="flex items-center gap-1.5 mb-0.5">
+                            <svg class="w-3.5 h-3.5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6M5 5h14a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2z"></path></svg>
+                            <span class="text-xs text-gray-500 font-semibold uppercase tracking-wide">Unselected</span>
+                            <span id="checkbox-unsel-count" class="text-xs text-gray-400 ml-auto"></span>
+                        </div>
+                        <span id="checkbox-unsel-value" class="text-base font-bold font-mono text-gray-700">—</span>
+                    </div>
+                </div>
+                <!-- Row 2: Select All / Clear All + Copy to Excel -->
+                <div class="flex items-center justify-between gap-2">
+                    <button onclick="copyTreeToExcel()" id="copy-excel-btn"
+                        class="flex items-center gap-1.5 text-xs px-2.5 py-1 bg-green-50 hover:bg-green-100 text-green-700 rounded border border-green-300 font-medium transition-colors">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path></svg>
+                        Copy for Excel
+                    </button>
+                    <div class="flex items-center gap-2">
+                        <button onclick="selectAllCheckboxes(true)" class="text-xs px-2.5 py-1 bg-white hover:bg-gray-200 text-gray-600 rounded border border-gray-300 font-medium transition-colors">Select All</button>
+                        <button onclick="selectAllCheckboxes(false)" class="text-xs px-2.5 py-1 bg-white hover:bg-gray-200 text-gray-600 rounded border border-gray-300 font-medium transition-colors">Clear All</button>
+                    </div>
+                </div>
+            </div>
+            <div id="tree-container" class="flex-1 overflow-y-auto custom-scrollbar pb-10">
+                <!-- Tree will be injected here via JavaScript -->
+            </div>
+        </div>
+
+        <!-- Tab 2: Left Pane (Instant Audit Statement) -->
+        <div id="view-audit" class="hidden w-full md:w-3/5 bg-white border-r border-gray-200 overflow-y-auto custom-scrollbar p-6">
+            <div class="border-b pb-4 mb-6">
+                <h2 class="text-xl font-bold text-gray-800">Paid To You: Reconciliation Audit</h2>
+                <p class="text-sm text-gray-500 mt-1">This statement audits the exact mathematical steps taken to arrive at your final "Paid to you" amount.</p>
+            </div>
+            
+            <div id="audit-results" class="space-y-6">
+                <!-- Fallback when no data parsed yet -->
+                <div class="text-center py-12 text-gray-400">
+                    <svg class="w-16 h-16 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
+                    <p class="font-medium">No audit data available yet.</p>
+                    <p class="text-xs mt-1">Please paste or load sample data at the top and click Parse.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Pane: Details (Active for both views) -->
+        <div class="w-full md:w-2/5 bg-gray-50 overflow-y-auto custom-scrollbar p-6 flex flex-col">
+            <div class="sticky top-0">
+                <h2 class="text-lg font-semibold mb-4 text-gray-700 border-b pb-2">Analysis Panel</h2>
+                
+                <div id="default-state" class="flex flex-col items-center justify-center h-64 text-center text-gray-500">
+                    <svg class="w-12 h-12 mb-3 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122"></path></svg>
+                    <p class="font-medium text-sm">Select any item from the distribution tree</p>
+                    <p class="text-xs text-gray-400 max-w-xs mt-1">You will see explanations, formulas, and how that specific parsed value contributes to your payout.</p>
+                </div>
+
+                <div id="detail-card" class="hidden bg-white border border-gray-200 rounded-lg shadow-sm p-5 transition-all duration-300">
+                    <div class="flex justify-between items-start mb-4">
+                        <span id="detail-type" class="px-2 py-1 bg-blue-100 text-blue-800 text-xs font-bold rounded uppercase tracking-wider">Category</span>
+                        <span id="detail-value-badge" class="px-2.5 py-1 text-sm font-bold rounded"></span>
+                    </div>
+                    <h3 id="detail-title" class="text-2xl font-bold text-gray-900 mb-2">Title</h3>
+                    
+                    <div id="detail-warning" class="hidden mb-4 p-3 bg-amber-50 border-l-4 border-amber-500 text-amber-800 text-xs rounded-r">
+                        <span id="detail-warning-text"></span>
+                    </div>
+
+                    <div class="bg-gray-100 p-3 rounded text-sm text-gray-600 mb-4 font-mono break-words">
+                        <strong>Raw Heading Path:</strong> <br>
+                        <span id="detail-path" class="text-xs text-gray-700">Path</span>
+                    </div>
+
+                    <div class="border-b border-gray-100 pb-3 mb-3">
+                        <h4 class="font-semibold text-gray-800 mb-1">Parsed Value</h4>
+                        <p id="detail-mapped-val" class="text-2xl font-bold text-gray-900">0.00</p>
+                    </div>
+
+                    <h4 class="font-semibold text-gray-800 mb-1">What does this mean?</h4>
+                    <p id="detail-desc" class="text-gray-600 mb-4 leading-relaxed text-sm">Description goes here.</p>
+
+                    <h4 class="font-semibold text-gray-800 mb-1">Accounting Rule</h4>
+                    <p id="detail-math" class="text-gray-600 text-sm leading-relaxed border-l-4 border-blue-400 pl-3 bg-blue-50/50 py-1.5">Math explanation.</p>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        // Data State Variables
+        let parsedValues = {};
+        let validationWarnings = {};
+        let selectedNodeData = null;
+        let selectedNodePath = null;
+        let currentlySelectedElement = null;
+        let currentUberData = null; // Holds the active, generated tree
+
+        // Checkbox state registry
+        let checkboxRegistry = {}; // pathKey -> { checkbox, parentPathKey }
+
+        function cascadeDown(pathKey, checked) {
+            const entry = checkboxRegistry[pathKey];
+            if (!entry) return;
+            entry.checkbox.checked = checked;
+            entry.checkbox.indeterminate = false;
+            // Find and cascade into all children
+            Object.entries(checkboxRegistry).forEach(([k, v]) => {
+                if (v.parentPathKey === pathKey) cascadeDown(k, checked);
+            });
+        }
+
+        function updateAncestors(pathKey) {
+            const entry = checkboxRegistry[pathKey];
+            if (!entry || !entry.parentPathKey) return;
+            const parentEntry = checkboxRegistry[entry.parentPathKey];
+            if (!parentEntry) return;
+
+            const siblingCheckboxes = Object.values(checkboxRegistry)
+                .filter(v => v.parentPathKey === entry.parentPathKey)
+                .map(v => v.checkbox);
+
+            const allChecked = siblingCheckboxes.every(cb => cb.checked && !cb.indeterminate);
+            const noneChecked = siblingCheckboxes.every(cb => !cb.checked && !cb.indeterminate);
+
+            if (allChecked) {
+                parentEntry.checkbox.checked = true;
+                parentEntry.checkbox.indeterminate = false;
+            } else if (noneChecked) {
+                parentEntry.checkbox.checked = false;
+                parentEntry.checkbox.indeterminate = false;
+            } else {
+                parentEntry.checkbox.checked = false;
+                parentEntry.checkbox.indeterminate = true;
+            }
+            updateAncestors(entry.parentPathKey);
+        }
+
+        function updateSelectedTotal() {
+            let selTotal = 0, selCount = 0;
+            let unselTotal = 0, unselCount = 0;
+
+            Object.entries(checkboxRegistry).forEach(([pathKey, entry]) => {
+                // Only count leaf nodes to avoid double-counting parent rollups
+                const isLeaf = !Object.values(checkboxRegistry).some(v => v.parentPathKey === pathKey);
+                if (!isLeaf) return;
+
+                const val = parsedValues[pathKey];
+                if (val === undefined || isNaN(val)) return;
+
+                if (entry.checkbox.checked && !entry.checkbox.indeterminate) {
+                    selTotal += val;
+                    selCount++;
+                } else {
+                    unselTotal += val;
+                    unselCount++;
+                }
+            });
+
+            const toolbar       = document.getElementById('checkbox-toolbar');
+            const totalEl       = document.getElementById('checkbox-total-value');
+            const countEl       = document.getElementById('checkbox-item-count');
+            const unselTotalEl  = document.getElementById('checkbox-unsel-value');
+            const unselCountEl  = document.getElementById('checkbox-unsel-count');
+
+            toolbar.classList.remove('hidden');
+
+            // Selected panel
+            totalEl.textContent  = selCount > 0 ? formatVal(selTotal) : '—';
+            totalEl.className    = `text-base font-bold font-mono ${selTotal < 0 ? 'text-red-700' : selCount > 0 ? 'text-blue-800' : 'text-gray-400'}`;
+            countEl.textContent  = selCount > 0 ? `${selCount} item${selCount !== 1 ? 's' : ''}` : '';
+
+            // Unselected panel
+            unselTotalEl.textContent = unselCount > 0 ? formatVal(unselTotal) : '—';
+            unselTotalEl.className   = `text-base font-bold font-mono ${unselTotal < 0 ? 'text-red-700' : unselCount > 0 ? 'text-gray-700' : 'text-gray-400'}`;
+            unselCountEl.textContent = unselCount > 0 ? `${unselCount} item${unselCount !== 1 ? 's' : ''}` : '';
+        }
+
+        function selectAllCheckboxes(checked) {
+            Object.values(checkboxRegistry).forEach(entry => {
+                entry.checkbox.checked = checked;
+                entry.checkbox.indeterminate = false;
+            });
+            updateSelectedTotal();
+        }
+
+        function copyTreeToExcel() {
+            if (!currentUberData) return;
+
+            // First pass: find max depth
+            function maxDepth(node, d) {
+                if (!node.children || node.children.length === 0) return d;
+                return Math.max(...node.children.map(c => maxDepth(c, d + 1)));
+            }
+            const depth = maxDepth(currentUberData, 1);
+
+            const rows = [];
+
+            // Header: paired "L1 Item / L1 Amount" columns for each level, then Selected
+            const header = [];
+            for (let i = 1; i <= depth; i++) {
+                header.push(`L${i} Item`, `L${i} Amount`);
+            }
+            header.push('Selected');
+            rows.push(header);
+
+            // Walk: node name → col level*2, amount → col level*2+1
+            function walk(node, level) {
+                const cols = new Array(depth * 2).fill('');
+                cols[level * 2] = node.name;
+                const val = parsedValues[node.pathKey];
+                cols[level * 2 + 1] = (val !== undefined && !isNaN(val)) ? val.toFixed(2) : '';
+
+                const entry = checkboxRegistry[node.pathKey];
+                cols.push(entry
+                    ? (entry.checkbox.indeterminate ? 'Partial' : entry.checkbox.checked ? 'Yes' : 'No')
+                    : '');
+
+                rows.push(cols);
+                if (node.children && node.children.length > 0) {
+                    node.children.forEach(child => walk(child, level + 1));
+                }
+            }
+            walk(currentUberData, 0);
+
+            const tsv = rows.map(row => row.join('\t')).join('\r\n');
+
+            navigator.clipboard.writeText(tsv).then(() => {
+                const btn = document.getElementById('copy-excel-btn');
+                const originalHTML = btn.innerHTML;
+                btn.innerHTML = `<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> Copied!`;
+                btn.classList.remove('bg-green-50', 'text-green-700', 'border-green-300');
+                btn.classList.add('bg-green-600', 'text-white', 'border-green-600');
+                setTimeout(() => {
+                    btn.innerHTML = originalHTML;
+                    btn.classList.add('bg-green-50', 'text-green-700', 'border-green-300');
+                    btn.classList.remove('bg-green-600', 'text-white', 'border-green-600');
+                }, 2000);
+            }).catch(() => {
+                const ta = document.createElement('textarea');
+                ta.value = tsv;
+                ta.style.position = 'fixed';
+                ta.style.opacity = '0';
+                document.body.appendChild(ta);
+                ta.focus();
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+            });
+        }
+
+        // Base hierarchical structure (Acts as a template). 
+        // If a column is missing from here, the code will dynamically generate it!
+        const baseUberDataTemplate = {
+            name: "Paid to you",
+            type: "Master Root",
+            pathKey: "Paid to you",
+            desc: "This is the grand total amount for this statement cycle or trip. This is the absolute top level. Mathematically, it represents the final net resolution between the platform and the driver.",
+            math: "Paid to you = (Your earnings) + (Trip balance)",
+            children: [
+                {
+                    name: "Your earnings",
+                    type: "Main Category",
+                    pathKey: "Paid to you:Your earnings",
+                    desc: "This bucket contains all the money generated by your driving services, bonuses, and tips, minus platform fees and taxes. It focuses purely on positive earnings vs service deductions.",
+                    math: "Your earnings = Fare + Other earnings + Promotion + Tip - Other fees - Taxes",
+                    children: [
+                        {
+                            name: "Fare",
+                            type: "Sub-Category",
+                            pathKey: "Paid to you:Your earnings:Fare",
+                            desc: "Core revenues derived directly from the trips themselves (time, distance, and core trip additions).",
+                            math: "Sum of all individual fare elements below.",
+                            children: [
+                                { name: "Fare", type: "Line Item", pathKey: "Paid to you:Your earnings:Fare:Fare", desc: "The standard base fare for the trip based on time and distance.", math: "Added to Earnings." },
+                                { name: "Outskirt Surcharge", type: "Line Item", pathKey: "Paid to you:Your earnings:Fare:Outskirt Surcharge", desc: "Extra fee paid to you for driving outside standard city boundaries.", math: "Added to Earnings." },
+                                { name: "Cancellation", type: "Line Item", pathKey: "Paid to you:Your earnings:Fare:Cancellation", desc: "The standard fee paid to you when a rider cancels a trip after a certain time threshold.", math: "Added to Earnings." },
+                                { name: "Additional cancellation fee for extended wait time", type: "Line Item", pathKey: "Paid to you:Your earnings:Fare:Additional cancellation fee for extended wait time", desc: "Extra compensation granted if you waited at the pickup location for a long time before the cancellation occurred.", math: "Added to Earnings." },
+                                { name: "Reservation Fee", type: "Line Item", pathKey: "Paid to you:Your earnings:Fare:Reservation Fee", desc: "Premium fee paid to you for fulfilling a trip that was scheduled by the rider in advance.", math: "Added to Earnings." },
+                                { name: "Surge", type: "Line Item", pathKey: "Paid to you:Your earnings:Fare:Surge", desc: "Bonus multiplier pricing added during times of high demand in a specific area.", math: "Added to Earnings." },
+                                { name: "UberX Priority", type: "Line Item", pathKey: "Paid to you:Your earnings:Fare:UberX Priority", desc: "Earnings portion from riders who paid a premium for a faster pickup/priority matching.", math: "Added to Earnings." },
+                                { name: "Package Fare", type: "Line Item", pathKey: "Paid to you:Your earnings:Fare:Package Fare", desc: "Fare specifically generated from Uber Connect (package delivery) trips.", math: "Added to Earnings." },
+                                { name: "Adjustment", type: "Line Item", pathKey: "Paid to you:Your earnings:Fare:Adjustment", desc: "Manual corrections to the fare made by Uber Support (e.g., if a system issue occurred).", math: "Can be positive or negative to Earnings." }
+                            ]
+                        },
+                        {
+                            name: "Other earnings",
+                            type: "Sub-Category",
+                            pathKey: "Paid to you:Your earnings:Other earnings",
+                            desc: "Additional compensations and allowances that fall outside of the standard time/distance fare calculation.",
+                            math: "Sum of all individual other earning elements below.",
+                            children: [
+                                { name: "Wait time at pick-up", type: "Line Item", pathKey: "Paid to you:Your earnings:Other earnings:Wait time at pick-up", desc: "Per-minute compensation for waiting for the rider at the pickup location after the initial grace period expires.", math: "Added to Earnings." },
+                                { name: "Paid to airport", type: "Line Item", pathKey: "Paid to you:Your earnings:Other earnings:Paid to airport", desc: "Specific allowances or compensations related to airport drop-offs or pick-ups.", math: "Added to Earnings." },
+                                { name: "Railway pick-up fee", type: "Line Item", pathKey: "Paid to you:Your earnings:Other earnings:Railway pick-up fee", desc: "Specific fee applied to train/railway station pick-ups.", math: "Added to Earnings." },
+                                { name: "Night time allowance", type: "Line Item", pathKey: "Paid to you:Your earnings:Other earnings:Night time allowance", desc: "A specific bonus or allowance for driving during designated late-night hours.", math: "Added to Earnings." },
+                                { name: "Day time allowance", type: "Line Item", pathKey: "Paid to you:Your earnings:Other earnings:Day time allowance", desc: "A specific bonus or allowance for driving during designated day hours.", math: "Added to Earnings." },
+                                { name: "Additional distance charges", type: "Line Item", pathKey: "Paid to you:Your earnings:Other earnings:Additional distance charges", desc: "Extra pay granted if the actual route distance significantly exceeded the expected upfront distance.", math: "Added to Earnings." },
+                                { name: "Additional time charges", type: "Line Item", pathKey: "Paid to you:Your earnings:Other earnings:Additional time charges", desc: "Extra pay granted if heavy traffic or route changes caused the trip time to exceed the upfront estimate.", math: "Added to Earnings." },
+                                { name: "Booking Fee", type: "Line Item", pathKey: "Paid to you:Your earnings:Other earnings:Booking Fee", desc: "Typically represents a dynamic booking fee portion passed to or recorded for the driver.", math: "Added to Earnings." },
+                                { name: "Other", type: "Line Item", pathKey: "Paid to you:Your earnings:Other earnings:Other", desc: "Miscellaneous additional earnings that do not fit into standard categories.", math: "Added to Earnings." }
+                            ]
+                        },
+                        {
+                            name: "Promotion",
+                            type: "Sub-Category",
+                            pathKey: "Paid to you:Your earnings:Promotion",
+                            desc: "Bonuses and incentives provided by Uber to encourage you to drive.",
+                            math: "Sum of all promotional bonuses.",
+                            children: [
+                                { name: "Promotion", type: "Line Item", pathKey: "Paid to you:Your earnings:Promotion:Promotion", desc: "General promotional bonuses (e.g., dynamic boost zone incentives).", math: "Added to Earnings." },
+                                { name: "Quest", type: "Line Item", pathKey: "Paid to you:Your earnings:Promotion:Quest", desc: "A lump-sum bonus paid for completing a set number of trips within a specific timeframe.", math: "Added to Earnings." }
+                            ]
+                        },
+                        {
+                            name: "Tip",
+                            type: "Line Item",
+                            pathKey: "Paid to you:Your earnings:Tip",
+                            desc: "Gratuity paid directly by the rider. Uber takes zero commission from this.",
+                            math: "Added to Earnings (100% yours)."
+                        },
+                        {
+                            name: "Other fees",
+                            type: "Sub-Category",
+                            pathKey: "Paid to you:Your earnings:Other fees",
+                            desc: "Service deductions taken directly from your gross trip revenues.",
+                            math: "Subtracted from Earnings.",
+                            children: [
+                                { name: "Platform fee", type: "Line Item", pathKey: "Paid to you:Your earnings:Other fees:Platform fee", desc: "Uber's service fee or commission. This is their cut for connecting you with the rider.", math: "Deducted from Earnings." }
+                            ]
+                        },
+                        {
+                            name: "Taxes",
+                            type: "Sub-Category",
+                            pathKey: "Paid to you:Your earnings:Taxes",
+                            desc: "Taxes withheld directly from your earnings by the platform to comply with local government regulations.",
+                            math: "Subtracted from Earnings.",
+                            children: [
+                                { name: "Income tax withholding", type: "Line Item", pathKey: "Paid to you:Your earnings:Taxes:Income tax withholding", desc: "Standard income tax withheld by the platform on your standard fares (e.g., TDS).", math: "Deducted from Earnings." },
+                                { name: "TDS on promotions", type: "Line Item", desc: "Tax Deducted at Source applied specifically to your promotional bonus earnings.", pathKey: "Paid to you:Your earnings:Taxes:TDS on promotions", math: "Deducted from Earnings." }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    name: "Trip balance",
+                    type: "Main Category",
+                    pathKey: "Paid to you:Trip balance",
+                    desc: "Reconciliation engine. It tracks how money physically moves (Payouts), out-of-pocket reimbursements (Refunds), and platform charges (Expenses). It reconciles your 'Earnings' with physical cash handoffs.",
+                    math: "Trip balance = Payouts + Refunds - Expenses - Taxes",
+                    children: [
+                        {
+                            name: "Payouts",
+                            type: "Sub-Category",
+                            pathKey: "Paid to you:Trip balance:Payouts",
+                            desc: "Details how you physically received the money.",
+                            math: "Reconciles how you received the money.",
+                            children: [
+                                { name: "Cash collected", type: "Line Item", pathKey: "Paid to you:Trip balance:Payouts:Cash collected", desc: "Cash the rider handed directly to you. Since you already hold this physically, Uber subtracts it from what they owe you via bank transfer.", math: "Counted against the bank transfer payout amount." },
+                                { name: "Transferred To Bank Account", type: "Line Item", pathKey: "Paid to you:Trip balance:Payouts:Transferred To Bank Account", desc: "The final digital payout wired to your bank account.", math: "Final settlement paid by Uber." }
+                            ]
+                        },
+                        {
+                            name: "Refunds",
+                            type: "Sub-Category",
+                            pathKey: "Paid to you:Trip balance:Refunds",
+                            desc: "Reimbursement for out-of-pocket expenses incurred during the trip.",
+                            math: "Added to Trip Balance (increases payout).",
+                            children: [
+                                { name: "Toll", type: "Line Item", pathKey: "Paid to you:Trip balance:Refunds:Toll", desc: "Reimbursement for toll booth charges you passed through while a rider was in the car.", math: "Added to Bank Transfer amount." }
+                            ]
+                        },
+                        {
+                            name: "Expenses",
+                            type: "Sub-Category",
+                            pathKey: "Paid to you:Trip balance:Expenses",
+                            desc: "Charges you owe to the platform that are not tied to a specific trip fare.",
+                            math: "Subtracted from Trip Balance.",
+                            children: [
+                                { name: "Driver subscription charge", type: "Line Item", pathKey: "Paid to you:Trip balance:Expenses:Driver subscription charge", desc: "Recurring fees you pay to Uber for specific services or vehicle subscription/rental programs.", math: "Deducted from Bank Transfer amount." }
+                            ]
+                        },
+                        {
+                            name: "Taxes",
+                            type: "Sub-Category",
+                            pathKey: "Paid to you:Trip balance:Taxes",
+                            desc: "Tax elements impacting the final trip balance settlement.",
+                            math: "Subtracted from Trip Balance.",
+                            children: [
+                                { name: "Tax", type: "Line Item", pathKey: "Paid to you:Trip balance:Taxes:Tax", desc: "Broader tax adjustments (e.g. GST or VAT collected on platform fees) that impact the final payout.", math: "Deducted from Bank Transfer amount." }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        };
+
+        // UI Element Declarations
+        const treeContainer = document.getElementById('tree-container');
+        const defaultState = document.getElementById('default-state');
+        const detailCard = document.getElementById('detail-card');
+        const detailTitle = document.getElementById('detail-title');
+        const detailType = document.getElementById('detail-type');
+        const detailPath = document.getElementById('detail-path');
+        const detailDesc = document.getElementById('detail-desc');
+        const detailMath = document.getElementById('detail-math');
+        const detailMappedVal = document.getElementById('detail-mapped-val');
+        const detailValueBadge = document.getElementById('detail-value-badge');
+        const parseStatus = document.getElementById('parse-status');
+        const rawInput = document.getElementById('raw-input');
+
+        // Tab Management
+        function switchTab(tab) {
+            const inputTab = document.getElementById('view-input');
+            const treeTab = document.getElementById('view-tree');
+            const auditTab = document.getElementById('view-audit');
+            const inputBtn = document.getElementById('tab-input-btn');
+            const treeBtn = document.getElementById('tab-tree-btn');
+            const auditBtn = document.getElementById('tab-audit-btn');
+
+            const activeClass = "text-sm font-semibold px-4 py-2 border-b-2 border-blue-600 text-blue-600 transition-all";
+            const inactiveClass = "text-sm font-semibold px-4 py-2 border-b-2 border-transparent text-gray-500 hover:text-gray-800 transition-all";
+
+            // Hide all tabs
+            if(inputTab) inputTab.classList.add('hidden');
+            if(treeTab) treeTab.classList.add('hidden');
+            if(auditTab) auditTab.classList.add('hidden');
+            
+            // Reset buttons
+            inputBtn.className = inactiveClass;
+            treeBtn.className = inactiveClass;
+            auditBtn.className = inactiveClass;
+
+            // Activate requested tab
+            if (tab === 'input') {
+                inputTab.classList.remove('hidden');
+                inputBtn.className = activeClass;
+            } else if (tab === 'tree') {
+                treeTab.classList.remove('hidden');
+                treeBtn.className = activeClass;
+            } else {
+                auditTab.classList.remove('hidden');
+                auditBtn.className = activeClass;
+            }
+        }
+
+        // Format raw currency string nicely
+        function formatVal(num) {
+            if (num === undefined || isNaN(num)) return "—";
+            const isNegative = num < 0;
+            const absoluteVal = Math.abs(num);
+            const formatted = new Intl.NumberFormat('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(absoluteVal);
+            return (isNegative ? "- " : "") + "₹" + formatted;
+        }
+
+        // Clean white spaces & format special Indian numbers
+        function parseCleanNumber(valStr) {
+            if (!valStr) return 0;
+            // Trim and strip wrapping double quotes often added by Excel copy-paste
+            let clean = valStr.trim().replace(/^"|"$/g, '');
+            if (clean === "-" || clean === "-\u00a0" || clean === "" || clean === "0") return 0;
+            
+            // Remove space blocks
+            clean = clean.replace(/\s+/g, '');
+            // Strip out common formatting (like commas) but keep negatives '-' and decimals '.'
+            clean = clean.replace(/[^0-9.-]/g, '');
+            
+            const num = parseFloat(clean);
+            return isNaN(num) ? 0 : num;
+        }
+
+        // Generate the Audit Report content based on currently parsed values
+        function generateAuditReport() {
+            const auditContainer = document.getElementById('audit-results');
+            if (Object.keys(parsedValues).length === 0) {
+                return; // Let the default fallback state show
+            }
+
+            // Retrieve Key Values with safe fallbacks. 
+            // It prefers the category aggregate total, but falls back to summing children if the aggregate is missing.
+            const paidToYou = parsedValues["Paid to you"] || 0;
+            const yourEarnings = parsedValues["Paid to you:Your earnings"] || 0;
+            
+            const coreFare = parsedValues["Paid to you:Your earnings:Fare"] || 0;
+            
+            const otherEarnings = parsedValues["Paid to you:Your earnings:Other earnings"] !== undefined 
+                ? parsedValues["Paid to you:Your earnings:Other earnings"] 
+                : (
+                    (parsedValues["Paid to you:Your earnings:Other earnings:Booking Fee"] || 0) +
+                    (parsedValues["Paid to you:Your earnings:Other earnings:Wait time at pick-up"] || 0) +
+                    (parsedValues["Paid to you:Your earnings:Other earnings:Paid to airport"] || 0) +
+                    (parsedValues["Paid to you:Your earnings:Other earnings:Night time allowance"] || 0) +
+                    (parsedValues["Paid to you:Your earnings:Other earnings:Railway pick-up fee"] || 0) +
+                    (parsedValues["Paid to you:Your earnings:Other earnings:Additional distance charges"] || 0) +
+                    (parsedValues["Paid to you:Your earnings:Other earnings:Additional time charges"] || 0) +
+                    (parsedValues["Paid to you:Your earnings:Other earnings:Day time allowance"] || 0) +
+                    (parsedValues["Paid to you:Your earnings:Other earnings:Other"] || 0)
+                );
+            
+            const promotions = parsedValues["Paid to you:Your earnings:Promotion"] !== undefined
+                ? parsedValues["Paid to you:Your earnings:Promotion"]
+                : (
+                    (parsedValues["Paid to you:Your earnings:Promotion:Promotion"] || 0) +
+                    (parsedValues["Paid to you:Your earnings:Promotion:Quest"] || 0)
+                );
+                
+            const tips = parsedValues["Paid to you:Your earnings:Tip"] || 0;
+            
+            const platformFee = parsedValues["Paid to you:Your earnings:Other fees"] !== undefined
+                ? parsedValues["Paid to you:Your earnings:Other fees"]
+                : (parsedValues["Paid to you:Your earnings:Other fees:Platform fee"] || 0);
+
+            const earningsTaxes = parsedValues["Paid to you:Your earnings:Taxes"] !== undefined
+                ? parsedValues["Paid to you:Your earnings:Taxes"]
+                : (
+                    (parsedValues["Paid to you:Your earnings:Taxes:Income tax withholding"] || 0) +
+                    (parsedValues["Paid to you:Your earnings:Taxes:TDS on promotions"] || 0)
+                );
+
+            // Trip Balance ledger
+            const cashCollected = parsedValues["Paid to you:Trip balance:Payouts:Cash collected"] || 0;
+            const bankTransferred = parsedValues["Paid to you:Trip balance:Payouts:Transferred To Bank Account"] || 0;
+            
+            const refundsToll = parsedValues["Paid to you:Trip balance:Refunds"] !== undefined
+                ? parsedValues["Paid to you:Trip balance:Refunds"]
+                : (parsedValues["Paid to you:Trip balance:Refunds:Toll"] || 0);
+
+            const subscriptionCharge = parsedValues["Paid to you:Trip balance:Expenses"] !== undefined
+                ? parsedValues["Paid to you:Trip balance:Expenses"]
+                : (parsedValues["Paid to you:Trip balance:Expenses:Driver subscription charge"] || 0);
+
+            const balanceTax = parsedValues["Paid to you:Trip balance:Taxes"] !== undefined
+                ? parsedValues["Paid to you:Trip balance:Taxes"]
+                : (parsedValues["Paid to you:Trip balance:Taxes:Tax"] || 0);
+
+            // Sum of Trip Balance
+            const tripBalanceTotal = cashCollected + bankTransferred + refundsToll + subscriptionCharge + balanceTax;
+            const reconciledTotal = yourEarnings + tripBalanceTotal;
+            const discrepancy = Math.abs(reconciledTotal - paidToYou);
+
+            let html = `
+                <!-- Main Equation Summary Box -->
+                <div class="bg-gradient-to-br from-blue-900 to-indigo-950 text-white rounded-xl p-6 shadow-md">
+                    <p class="text-xs text-indigo-200 uppercase tracking-wider font-semibold">Ultimate Settlement Formula</p>
+                    <div class="mt-2 flex flex-col md:flex-row md:items-baseline justify-between gap-2 border-b border-indigo-800/60 pb-4">
+                        <h3 class="text-3xl font-extrabold text-white">${formatVal(paidToYou)}</h3>
+                        <span class="text-xs bg-green-500/20 text-green-300 border border-green-500/30 px-2 py-0.5 rounded">Paid To You</span>
+                    </div>
+                    <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                        <div>
+                            <span class="text-xs text-indigo-300 block">Total Earnings (Credit)</span>
+                            <span class="text-lg font-bold text-emerald-400">${formatVal(yourEarnings)}</span>
+                        </div>
+                        <div>
+                            <span class="text-xs text-indigo-300 block">Trip Ledger & Payouts (Debit)</span>
+                            <span class="text-lg font-bold text-red-300">${formatVal(tripBalanceTotal)}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 1: Earnings Breakdown -->
+                <div class="bg-white border border-gray-200 rounded-lg p-5">
+                    <h3 class="text-base font-bold text-gray-800 border-b pb-2 mb-3">Step 1: Your Driving Earnings (Gross to Net)</h3>
+                    <div class="space-y-2 text-sm">
+                        <div class="flex justify-between items-center text-gray-600">
+                            <span>Core Ride Fares</span>
+                            <span class="font-mono text-gray-800">${formatVal(coreFare)}</span>
+                        </div>
+                        <div class="flex justify-between items-center text-gray-600">
+                            <span>Other Earnings & Allowances</span>
+                            <span class="font-mono text-gray-800">${formatVal(otherEarnings)}</span>
+                        </div>
+                        <div class="flex justify-between items-center text-gray-600">
+                            <span>Promotions & Quests</span>
+                            <span class="font-mono text-gray-800">${formatVal(promotions)}</span>
+                        </div>
+                        <div class="flex justify-between items-center text-gray-600">
+                            <span>Tips from Customers</span>
+                            <span class="font-mono text-gray-800">${formatVal(tips)}</span>
+                        </div>
+                        <div class="flex justify-between items-center text-gray-600">
+                            <span>Uber Platform Commission Fee</span>
+                            <span class="font-mono text-red-600">${formatVal(platformFee)}</span>
+                        </div>
+                        <div class="flex justify-between items-center text-gray-600">
+                            <span>Withholding Income Taxes (TDS)</span>
+                            <span class="font-mono text-red-600">${formatVal(earningsTaxes)}</span>
+                        </div>
+                        <div class="flex justify-between items-center border-t pt-2 font-bold text-gray-900 text-base">
+                            <span>Total Earnings Sum</span>
+                            <span class="font-mono text-green-700">${formatVal(coreFare + otherEarnings + promotions + tips + platformFee + earningsTaxes)}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 2: Trip Balance Breakdown -->
+                <div class="bg-white border border-gray-200 rounded-lg p-5">
+                    <h3 class="text-base font-bold text-gray-800 border-b pb-2 mb-3">Step 2: Ledger Settlements & physical cash</h3>
+                    <div class="space-y-2 text-sm">
+                        <div class="flex justify-between items-start text-gray-600">
+                            <div>
+                                <span>Cash Collected Directly from Riders</span>
+                                <p class="text-xs text-gray-400">Physical cash you kept from passengers</p>
+                            </div>
+                            <span class="font-mono text-red-600">${formatVal(cashCollected)}</span>
+                        </div>
+                        <div class="flex justify-between items-start text-gray-600">
+                            <div>
+                                <span>Toll Reimbursements</span>
+                                <p class="text-xs text-gray-400">Reimbursements for toll costs you paid</p>
+                            </div>
+                            <span class="font-mono text-green-700">${formatVal(refundsToll)}</span>
+                        </div>
+                        <div class="flex justify-between items-start text-gray-600">
+                            <div>
+                                <span>Driver subscription charges</span>
+                                <p class="text-xs text-gray-400">Device/Vehicle platform charges</p>
+                            </div>
+                            <span class="font-mono text-red-600">${formatVal(subscriptionCharge)}</span>
+                        </div>
+                        <div class="flex justify-between items-start text-gray-600">
+                            <div>
+                                <span>Taxes on balance adjustments</span>
+                                <p class="text-xs text-gray-400">Other transaction taxes</p>
+                            </div>
+                            <span class="font-mono text-red-600">${formatVal(balanceTax)}</span>
+                        </div>
+                        <div class="flex justify-between items-start text-gray-600">
+                            <div>
+                                <span>Transferred To Bank Account</span>
+                                <p class="text-xs text-gray-400">Electronic wire payment from Uber</p>
+                            </div>
+                            <span class="font-mono text-red-600">${formatVal(bankTransferred)}</span>
+                        </div>
+                        <div class="flex justify-between items-center border-t pt-2 font-bold text-gray-900 text-base">
+                            <span>Trip Ledger Total</span>
+                            <span class="font-mono text-red-700">${formatVal(tripBalanceTotal)}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Verification Step -->
+                <div class="p-4 rounded-lg border ${discrepancy < 50 ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-200'}">
+                    <div class="flex items-start gap-2.5">
+                        <svg class="w-5 h-5 text-green-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        <div>
+                            <h4 class="font-bold text-gray-900 text-sm">Audit Reconciliation Check</h4>
+                            <p class="text-xs text-gray-600 mt-0.5">
+                                Your total digital earnings were <strong class="text-green-700">${formatVal(yourEarnings)}</strong>. 
+                                After adjusting for cash already held in hand (<strong class="text-gray-900">${formatVal(cashCollected)}</strong>), bank transfers made (<strong class="text-gray-900">${formatVal(bankTransferred)}</strong>), toll refunds, and driver fees, the balance matches the reported <strong>Paid to you</strong> sum perfectly!
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            auditContainer.innerHTML = html;
+        }
+
+        // Check if value is negative
+        function getValColorClass(val) {
+            if (val === undefined || isNaN(val) || val === 0) return "text-gray-500 bg-gray-100 border border-gray-200";
+            return val < 0 
+                ? "text-red-700 bg-red-50 border border-red-200 font-semibold" 
+                : "text-green-700 bg-green-50 border border-green-200 font-semibold";
+        }
+
+        // Show details in the analytical sidebar
+        function showDetails(data, pathString, element) {
+            selectedNodeData = data;
+            selectedNodePath = pathString;
+            
+            // Update active state class names on UI
+            defaultState.classList.add('hidden');
+            detailCard.classList.remove('hidden');
+
+            if(currentlySelectedElement) {
+                currentlySelectedElement.classList.remove('node-active');
+                currentlySelectedElement.classList.add('border-transparent');
+            }
+            currentlySelectedElement = element;
+            element.classList.add('node-active');
+            element.classList.remove('border-transparent');
+
+            // Set simple details
+            detailTitle.textContent = data.name;
+            detailType.textContent = data.type;
+            detailPath.textContent = data.pathKey;
+            detailDesc.textContent = data.desc;
+            detailMath.textContent = data.math;
+
+            // Handle Warnings Validation
+            const warning = validationWarnings[data.pathKey];
+            const warningContainer = document.getElementById('detail-warning');
+            
+            if (warning) {
+                warningContainer.classList.remove('hidden');
+                document.getElementById('detail-warning-text').innerHTML = `<strong>Mismatch Detected:</strong> The provided value is <strong>${formatVal(warning.provided)}</strong>, but the mathematical sum of its children is <strong>${formatVal(warning.calculated)}</strong>.`;
+            } else {
+                warningContainer.classList.add('hidden');
+            }
+
+            // Display Parsed value
+            const parsedVal = parsedValues[data.pathKey];
+            if (parsedVal !== undefined && !isNaN(parsedVal)) {
+                detailMappedVal.textContent = formatVal(parsedVal);
+                
+                if (parsedVal < 0) {
+                    detailValueBadge.textContent = "Debit/Deduction";
+                    detailValueBadge.className = "px-2 py-1 text-xs font-bold rounded uppercase tracking-wider bg-red-100 text-red-800";
+                    detailMappedVal.className = "text-2xl font-bold text-red-600";
+                } else if (parsedVal > 0) {
+                    detailValueBadge.textContent = "Credit/Earnings";
+                    detailValueBadge.className = "px-2 py-1 text-xs font-bold rounded uppercase tracking-wider bg-green-100 text-green-800";
+                    detailMappedVal.className = "text-2xl font-bold text-green-600";
+                } else {
+                    detailValueBadge.textContent = "Neutral";
+                    detailValueBadge.className = "px-2 py-1 text-xs font-bold rounded uppercase tracking-wider bg-gray-200 text-gray-700";
+                    detailMappedVal.className = "text-2xl font-bold text-gray-700";
+                }
+
+            } else {
+                detailMappedVal.textContent = "— (Not Found)";
+                detailValueBadge.textContent = "Unmapped";
+                detailValueBadge.className = "px-2 py-1 bg-gray-100 text-gray-600 text-xs font-bold rounded uppercase tracking-wider";
+                detailMappedVal.className = "text-2xl font-bold text-gray-400";
+            }
+
+            // Style category badge
+            if (data.type === "Master Root") detailType.className = "px-2 py-1 bg-purple-100 text-purple-800 text-xs font-bold rounded uppercase tracking-wider";
+            else if (data.type === "Main Category") detailType.className = "px-2 py-1 bg-indigo-100 text-indigo-800 text-xs font-bold rounded uppercase tracking-wider";
+            else if (data.type === "Sub-Category") detailType.className = "px-2 py-1 bg-blue-100 text-blue-800 text-xs font-bold rounded uppercase tracking-wider";
+            else detailType.className = "px-2 py-1 bg-emerald-100 text-emerald-800 text-xs font-bold rounded uppercase tracking-wider";
+        }
+
+        // Recursive rendering function
+        function renderTree(node, container, path = "", parentPathKey = null) {
+            const currentPath = path ? `${path} : ${node.name}` : node.name;
+            const hasChildren = node.children && node.children.length > 0;
+            
+            const nodeWrapper = document.createElement('div');
+            nodeWrapper.className = "my-1";
+            
+            // Build visual Node Row
+            const nodeHeader = document.createElement('div');
+            nodeHeader.className = "flex items-center justify-between py-2 px-2.5 cursor-pointer node-hover rounded-md border border-transparent transition-all";
+            
+            // Left content of row
+            const leftDiv = document.createElement('div');
+            leftDiv.className = "flex items-center min-w-0";
+            
+            const iconContainer = document.createElement('div');
+            iconContainer.className = "flex items-center w-8 justify-end flex-shrink-0";
+            
+            if (hasChildren) {
+                iconContainer.innerHTML = getChevron(true) + getFolderIcon(true);
+            } else {
+                iconContainer.innerHTML = `<span class="w-2 mr-1"></span>` + getFileIcon();
+            }
+
+            const textSpan = document.createElement('span');
+            textSpan.className = "text-gray-700 text-sm ml-2 select-none font-medium truncate";
+            textSpan.textContent = node.name;
+
+            leftDiv.appendChild(iconContainer);
+            leftDiv.appendChild(textSpan);
+            nodeHeader.appendChild(leftDiv);
+
+            // Right content: dynamic numerical value display
+            const rightDiv = document.createElement('div');
+            rightDiv.className = "flex items-center gap-2 flex-shrink-0 ml-4";
+            
+            // Insert warning icon if there is a mismatch
+            const warning = validationWarnings[node.pathKey];
+            if (warning) {
+                const warningIcon = document.createElement('span');
+                warningIcon.innerHTML = `<svg class="w-4 h-4 text-amber-500" title="Mismatch! Provided: ${formatVal(warning.provided)}, Calculated: ${formatVal(warning.calculated)}" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path></svg>`;
+                rightDiv.appendChild(warningIcon);
+            }
+
+            const valueSpan = document.createElement('span');
+            const mappedVal = parsedValues[node.pathKey];
+            
+            if (mappedVal !== undefined && !isNaN(mappedVal)) {
+                valueSpan.className = `text-xs px-2 py-0.5 rounded font-mono font-semibold ${getValColorClass(mappedVal)}`;
+                valueSpan.textContent = formatVal(mappedVal);
+            } else {
+                valueSpan.className = "text-xs px-2 py-0.5 rounded font-mono text-gray-300 border border-gray-100 bg-gray-50/50";
+                valueSpan.textContent = "—";
+            }
+
+            // ── Checkbox ────────────────────────────────────────────────────────
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.className = 'w-4 h-4 rounded border-gray-400 text-blue-600 accent-blue-600 cursor-pointer flex-shrink-0 ml-1';
+            checkbox.title = 'Select this item';
+
+            // Register in global map
+            checkboxRegistry[node.pathKey] = { checkbox, parentPathKey };
+
+            checkbox.addEventListener('click', (e) => {
+                e.stopPropagation(); // don't trigger row expand/collapse
+            });
+            checkbox.addEventListener('change', (e) => {
+                e.stopPropagation();
+                const isChecked = checkbox.checked;
+
+                // Cascade down to all descendants
+                cascadeDown(node.pathKey, isChecked);
+
+                // Bubble up to update ancestor states
+                updateAncestors(node.pathKey);
+
+                // Refresh selected total display
+                updateSelectedTotal();
+            });
+            // ────────────────────────────────────────────────────────────────────
+
+            rightDiv.appendChild(valueSpan);
+            rightDiv.appendChild(checkbox);
+            nodeHeader.appendChild(rightDiv);
+            nodeWrapper.appendChild(nodeHeader);
+
+            // Recursively construct children block
+            let childrenContainer = null;
+            if (hasChildren) {
+                childrenContainer = document.createElement('div');
+                childrenContainer.className = "tree-line block";
+                node.children.forEach(child => renderTree(child, childrenContainer, currentPath, node.pathKey));
+                nodeWrapper.appendChild(childrenContainer);
+            }
+
+            // Click behavior
+            nodeHeader.addEventListener('click', (e) => {
+                e.stopPropagation();
+                
+                showDetails(node, currentPath, nodeHeader);
+
+                if (hasChildren) {
+                    const isOpen = !childrenContainer.classList.contains('hidden');
+                    if (isOpen) {
+                        childrenContainer.classList.add('hidden');
+                        iconContainer.innerHTML = getChevron(false) + getFolderIcon(false);
+                    } else {
+                        childrenContainer.classList.remove('hidden');
+                        iconContainer.innerHTML = getChevron(true) + getFolderIcon(true);
+                    }
+                }
+            });
+
+            container.appendChild(nodeWrapper);
+        }
+
+        // Feature: Dynamically builds the tree for categories that are in the data but not in the standard template
+        function injectMissingNodes(treeRoot, parsedKeys) {
+            parsedKeys.forEach(fullPath => {
+                // Ensure we only build out financial columns related to Paid to you
+                if (!fullPath || !fullPath.startsWith("Paid to you")) return; 
+                if (fullPath === "Paid to you") return; // Root already exists
+
+                const parts = fullPath.split(':').map(p => p.trim());
+                let currentNode = treeRoot;
+                let currentPathKey = parts[0]; // "Paid to you"
+
+                // Traverse and construct branches as needed
+                for (let i = 1; i < parts.length; i++) {
+                    const part = parts[i];
+                    currentPathKey += " : " + part; // Reconstruct path identically to input matching
+                    
+                    if (!currentNode.children) currentNode.children = [];
+                    
+                    let foundChild = currentNode.children.find(c => c.name.trim() === part);
+                    
+                    if (!foundChild) {
+                        const isLast = (i === parts.length - 1);
+                        foundChild = {
+                            name: part,
+                            type: isLast ? "Line Item (Auto-Added)" : "Sub-Category",
+                            pathKey: currentPathKey,
+                            desc: "Dynamically added from pasted statement data. This is a region-specific or newly introduced column.",
+                            math: isLast ? "Parsed directly from statement." : "Sum of children.",
+                            children: []
+                        };
+                        currentNode.children.push(foundChild);
+                    }
+                    currentNode = foundChild;
+                }
+            });
+        }
+
+        // Recursive function to calculate missing parent totals and validate provided ones
+        function calculateRollups(node) {
+            // Helper to get value with loose spacing match
+            const getLooseMatch = (targetKey) => {
+                if (parsedValues[targetKey] !== undefined) return parsedValues[targetKey];
+                const normalizedTarget = targetKey.replace(/\s+/g, '');
+                const foundKey = Object.keys(parsedValues).find(k => k.replace(/\s+/g, '') === normalizedTarget);
+                return foundKey ? parsedValues[foundKey] : undefined;
+            };
+
+            // If it's a leaf node (no children), just return its parsed value or 0
+            if (!node.children || node.children.length === 0) {
+                let val = getLooseMatch(node.pathKey);
+                val = val !== undefined ? val : 0;
+                
+                // Force sync the strict template key with the discovered value so the UI can find it
+                parsedValues[node.pathKey] = val; 
+                return val;
+            }
+
+            // Calculate the total sum of all nested children
+            let calculatedSum = 0;
+            node.children.forEach(child => {
+                calculatedSum += calculateRollups(child);
+            });
+
+            // Find provided total using flexible spacing match
+            let providedTotal = getLooseMatch(node.pathKey);
+
+            if (providedTotal !== undefined) {
+                // If a total was provided, check if it matches the sum of its parts (allowing 1 unit for rounding tolerance)
+                if (Math.abs(providedTotal - calculatedSum) > 1) {
+                    validationWarnings[node.pathKey] = {
+                        provided: providedTotal,
+                        calculated: calculatedSum
+                    };
+                }
+                // Force sync the strict template key with the discovered value so the UI can find it
+                parsedValues[node.pathKey] = providedTotal;
+                return providedTotal;
+            } else {
+                // If no total was provided, dynamically populate it
+                parsedValues[node.pathKey] = calculatedSum;
+                return calculatedSum;
+            }
+        }
+
+        // Parsing system: Matches tab-separated or column-aligned structure accurately
+        function processData() {
+            const raw = rawInput.value.trim();
+            if (!raw) {
+                showStatus("Please paste some data in the text area first.", "bg-amber-100 text-amber-800");
+                return;
+            }
+
+            // Split by lines
+            const lines = raw.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+            
+            if (lines.length < 2) {
+                showStatus("Parsing failed: Make sure you paste BOTH the values line and the columns line.", "bg-red-100 text-red-800");
+                return;
+            }
+
+            // Detect which line contains the headers
+            let headerIdx = 0;
+            for (let i = 0; i < lines.length; i++) {
+                if (lines[i].includes("Paid to you") || lines[i].includes("Paid to you :") || !/[0-9]/.test(lines[i])) {
+                    headerIdx = i;
+                    break;
+                }
+            }
+
+            let headingsLine = lines[headerIdx];
+            let rawHeads = headingsLine.split('\t');
+            if (rawHeads.length <= 1) rawHeads = headingsLine.split(/\s{2,}/);
+
+            // 1. REFRESH STATE: Clone the fresh base template every time Parse is clicked
+            currentUberData = JSON.parse(JSON.stringify(baseUberDataTemplate));
+            parsedValues = {};
+            validationWarnings = {};
+            
+            let matchedCount = 0;
+            let rowsProcessed = 0;
+
+            const cleanHeaders = rawHeads.map(head => head.replace(/^"|"$/g, '').trim().replace(/\s+:\s+/g, ' : ')); // Normalize spaces around colons
+
+            // Loop through all value lines (skipping the header) and accumulate totals
+            for (let i = 0; i < lines.length; i++) {
+                if (i === headerIdx) continue;
+
+                let valuesLine = lines[i];
+                let rawVals = valuesLine.split('\t');
+                
+                // Fallback for space separation if tabs aren't present
+                if (rawVals.length <= 1 && rawHeads.length > 1) {
+                    rawVals = valuesLine.split(/\s{2,}/);
+                }
+
+                // Match each parsed header to its index value for this specific row
+                cleanHeaders.forEach((cleanHeader, index) => {
+                    if (cleanHeader) {
+                        const rawVal = rawVals[index];
+                        const parsedNum = parseCleanNumber(rawVal);
+                        
+                        // Initialize if this is the first time we see this header
+                        if (parsedValues[cleanHeader] === undefined) {
+                            parsedValues[cleanHeader] = 0;
+                            matchedCount++;
+                        }
+                        
+                        // Add to the running total
+                        parsedValues[cleanHeader] += parsedNum;
+                    }
+                });
+                rowsProcessed++;
+            }
+
+            // 2. DYNAMIC GENERATION: Build out missing tree branches before doing math
+            injectMissingNodes(currentUberData, Object.keys(parsedValues));
+
+            // 3. MATH & ROLLUPS: Calculate missing parent totals dynamically and validate existing ones across the aggregated sum
+            calculateRollups(currentUberData);
+
+            // 4. UI REFRESH: Re-render structural tree completely
+            checkboxRegistry = {};
+            document.getElementById('checkbox-toolbar').classList.add('hidden');
+            treeContainer.innerHTML = "";
+            renderTree(currentUberData, treeContainer);
+
+            // Generate Instant Audit Report
+            generateAuditReport();
+
+            showStatus(`Successfully aggregated ${rowsProcessed} rows across ${matchedCount} distribution columns!`, "bg-green-100 text-green-800");
+
+            // Reset detail view
+            defaultState.classList.remove('hidden');
+            detailCard.classList.add('hidden');
+            selectedNodeData = null;
+            if(currentlySelectedElement) {
+                currentlySelectedElement.classList.remove('node-active');
+                currentlySelectedElement.classList.add('border-transparent');
+                currentlySelectedElement = null;
+            }
+
+            // Automatically jump to tree view upon success to view results
+            setTimeout(() => switchTab('tree'), 600);
+        }
+
+        // Show status message
+        function showStatus(msg, bgClass) {
+            const parseStatus = document.getElementById('parse-status');
+            parseStatus.className = `block text-xs py-2 px-2.5 rounded font-medium ${bgClass}`;
+            parseStatus.textContent = msg;
+            parseStatus.classList.remove('hidden');
+        }
+
+        // Load the explicit raw data shared by user
+        function loadSample() {
+            const sampleData = `tag	transaction UUID	Driver UUID	Driver first name	Driver surname	Trip UUID	Description	Organisation name	Org alias	vs reporting	 Paid to you 	Paid to you : Your earnings	Paid to you : Trip balance : Payouts : Cash collected	Paid to you : Your earnings : Fare	Paid to you : Your earnings : Taxes	Paid to you : Your earnings : Fare : Fare	Paid to you : Your earnings : Other earnings : Booking Fee	Paid to you : Trip balance : Taxes : Tax	Paid to you : Your earnings : Taxes : Income tax withholding	Paid to you : Your earnings : Fare : UberX Priority	Paid to you : Trip balance : Refunds : Toll	Paid to you : Your earnings : Fare : Cancellation	Paid to you : Trip balance : Expenses : Driver subscription charge	Paid to you : Your earnings : Other earnings : Wait time at pick-up	Paid to you : Your earnings : Fare : Reservation Fee	Paid to you : Your earnings : Fare : Surge	Paid to you : Your earnings : Other fees : Platform fee	Paid to you : Your earnings : Tip	Paid to you : Your earnings : Taxes : TDS on promotions	Paid to you : Your earnings : Other earnings : Paid to airport	Paid to you : Trip balance : Expenses : Toll adjustment	Paid to you : Your earnings : Promotion : Promotion	Paid to you : Your earnings : Other earnings : Night time allowance	Paid to you : Your earnings : Fare : Additional cancellation fee for extended wait time	Paid to you : Your earnings : Other earnings : Other	Paid to you : Your earnings : Fare : Outskirt Surcharge	Paid to you : Your earnings : Other earnings : Booking fee	Paid to you : Your earnings : Promotion : Quest	Paid to you : Trip balance : Payouts : Transferred To Bank Account	Paid to you : Your earnings : Other earnings : Day time allowance	Paid to you : Trip balance : Expenses : Toll	Paid to you : Your earnings : Fare : Package Fare	Paid to you : Your earnings : Other earnings : Additional distance charges	Paid to you : Your earnings : Other earnings : Additional time charges	Paid to you : Your earnings : Fare : Booking fee	Paid to you : Your earnings : Other earnings : Adjustment	Paid to you : Your earnings : Fare : Adjustment	Paid to you : Your earnings : Fare : Fare Adjustment
+Ride Revenue	9319e4bc-b15c-3fc3-9581-5b6dd9afe2a6	8f33b8f1-dc7b-4ae0-89c3-6f6875a49dd6	MUHAMMED	P	70a32f1e-8ec4-450c-b173-3a087ed7ebe8	trip fare adjust order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:00:19.317 +0530 IST	50	50	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	50	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	57cae0fc-82c3-346e-955b-e386d980298c	f9f61bb6-33a8-4e6f-90c0-27f6572b0192	NIDHIN	MOHAN	d4bcf3c8-0ce8-4d1e-a3b1-04b217a38953	trip completed order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:00:24.059 +0530 IST	11.14	167.41	-155.52	166.66	0	166.66	0.75	-0.75	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	2ac695f0-8583-3fbd-9be8-0f490257885c	f9f61bb6-33a8-4e6f-90c0-27f6572b0192	NIDHIN	MOHAN	d4bcf3c8-0ce8-4d1e-a3b1-04b217a38953	trip fare adjust order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:00:26.748 +0530 IST	-0.17	-0.17	0	0	0	0	0	0	-0.17	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	48afeca9-060f-36bc-990e-7e880164087d	528f3994-42f8-461f-9615-3dcb9d465ffc	MUHAMMAD	-	d5b57b09-0ea3-48bb-8171-4b46b55543e2	trip completed order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:00:31.575 +0530 IST	-4.9	189.45	-193.6	181.3	0	181.3	0.75	-0.75	0	0	0	0	0	7.4	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	250e34b5-fd2c-3346-83e6-a7d1db058d7b	528f3994-42f8-461f-9615-3dcb9d465ffc	MUHAMMAD	-	d5b57b09-0ea3-48bb-8171-4b46b55543e2	trip fare adjust order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:00:34.307 +0530 IST	-0.19	-0.19	0	0	0	0	0	0	-0.19	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	1119c5a3-8251-32e5-986b-d01c4e5eb60e	66fd7e04-2709-4a88-9e7e-a814aa9128e2	ABDURAUF	-	4826c1bf-ede6-45d5-b1b1-b58a95699a45	trip completed order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:00:48.251 +0530 IST	-4.9	203.67	-207.82	202.92	0	202.92	0.75	-0.75	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	710b4df5-3801-3423-b60d-eea8589dfba1	66fd7e04-2709-4a88-9e7e-a814aa9128e2	ABDURAUF	-	4826c1bf-ede6-45d5-b1b1-b58a95699a45	trip fare adjust order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:00:50.724 +0530 IST	-0.2	-0.2	0	0	0	0	0	0	-0.2	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	9efe70e5-edda-30f2-8b66-97e1f2325702	c860d01e-c054-433c-97c5-7a7b65109382	AL AMEEN	A	11cad290-7a46-4a34-8f07-85fdae68f825	trip completed order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:01:08.098 +0530 IST	85.75	222.47	-135.97	221.72	0	221.72	0.75	-0.75	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	99d409e6-5275-350a-8231-65556d0fdeaa	c860d01e-c054-433c-97c5-7a7b65109382	AL AMEEN	A	11cad290-7a46-4a34-8f07-85fdae68f825	trip fare adjust order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:01:11.06 +0530 IST	-0.22	-0.22	0	0	0	0	0	0	-0.22	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	39ad3cb2-fdfe-374e-883f-31ee6e691a80	bef10b20-f1d6-45aa-8618-cdf6d96fdb07	AFSAL	N	05a88c7a-8af3-4f54-9037-6023acbfb5a4	trip completed order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:01:35.411 +0530 IST	-60	380.41	-431.72	356.72	0	276.72	8.69	-8.69	0	0	0	0	0	15	80	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	f8b9fa6d-855e-35cb-9697-50d2dd1797d0	2369212c-1011-4ffa-b3b9-b902ce5a1608	DHANESH	M	558eafb7-ef7e-4f94-9ac5-896dc61c698c	trip completed order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:01:36.455 +0530 IST	-4.9	202.77	-206.92	202.02	0	202.02	0.75	-0.75	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	2cab570c-cb3e-34dc-a24c-835dabe441e8	bef10b20-f1d6-45aa-8618-cdf6d96fdb07	AFSAL	N	05a88c7a-8af3-4f54-9037-6023acbfb5a4	trip fare adjust order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:01:37.744 +0530 IST	-0.37	-0.37	0	0	0	0	0	0	-0.37	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	47568b28-8d3c-39c0-bd38-0527232da5b6	2369212c-1011-4ffa-b3b9-b902ce5a1608	DHANESH	M	558eafb7-ef7e-4f94-9ac5-896dc61c698c	trip fare adjust order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:01:39.069 +0530 IST	-0.2	-0.2	0	0	0	0	0	0	-0.2	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	bc3dd3cb-c503-3dcb-9165-4f6b17f312ba	52ca828b-d1a3-4bc0-9f54-34e0279eedf7	MUHAMMED	M	3c6fa267-b3ec-4b7d-8e37-1c09fc215f2e	trip completed order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:01:51.122 +0530 IST	19.8	19.8	0	19.8	0	0	0	0	0	0	0	19.8	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	2642e605-4d85-399c-a420-6449305c3906	52ca828b-d1a3-4bc0-9f54-34e0279eedf7	MUHAMMED	M	3c6fa267-b3ec-4b7d-8e37-1c09fc215f2e	trip fare adjust order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:01:53.311 +0530 IST	-0.02	-0.02	0	0	0	0	0	0	-0.02	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	fb759364-525e-3ec6-8c93-ad8c3bb05192	70ab3fa0-2b67-4137-b65c-fe2d0280b7a2	BICHU.	S	4e5300ff-2356-47b1-990b-e2dcfd228fee	trip completed order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:02:49.061 +0530 IST	67.2	67.2	0	67.2	0	0	0	0	0	0	0	67.2	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	99324a36-f491-35a1-b004-6f8b2d60373a	70ab3fa0-2b67-4137-b65c-fe2d0280b7a2	BICHU.	S	4e5300ff-2356-47b1-990b-e2dcfd228fee	trip fare adjust order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:02:51.737 +0530 IST	-0.07	-0.07	0	0	0	0	0	0	-0.07	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	03e67016-f44e-3f8e-a203-6827d19f676d	dacd6af8-a343-4581-8edc-0ca06d0b2fdb	MOHAMMEAD DARVESH M	-	710e7dbd-37d0-41a2-98c8-08ee0fc8601b	trip completed order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:03:02.266 +0530 IST	-4.9	215.76	-219.91	215.01	0	215.01	0.75	-0.75	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	9c5b7479-8926-3c40-83be-36a4bec866ee	dacd6af8-a343-4581-8edc-0ca06d0b2fdb	MOHAMMEAD DARVESH M	-	710e7dbd-37d0-41a2-98c8-08ee0fc8601b	trip fare adjust order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:03:04.867 +0530 IST	-0.22	-0.22	0	0	0	0	0	0	-0.22	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	18d177cd-fc69-3e78-9301-213517f55d62	44e7fe75-005e-4161-82fa-c0a4ad74e657	JABIR	P	8c8be071-1651-4b5d-b7fe-aca09471431f	trip completed order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:03:46.211 +0530 IST	-41	705.52	-860.27	699.27	0	599.27	6.25	-6.25	0	0	120	0	0	0	100	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	c6dbd35b-15a4-307b-a0ec-89c90536e5a7	44e7fe75-005e-4161-82fa-c0a4ad74e657	JABIR	P	8c8be071-1651-4b5d-b7fe-aca09471431f	trip fare adjust order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:03:49.065 +0530 IST	-0.82	-0.82	0	0	0	0	0	0	-0.82	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	9cdf0773-cba7-32d1-afaa-a228d7a7f727	a88754c1-2b53-47c0-a051-5234f8436a97	ABIN	NELSON	c7c3e5ed-ae79-4b9a-adfd-6033f914cf92	trip completed order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:03:53.156 +0530 IST	67.2	67.2	0	67.2	0	0	0	0	0	0	0	67.2	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	fb0ed296-bfb3-346e-ab31-59eb3406eb71	a88754c1-2b53-47c0-a051-5234f8436a97	ABIN	NELSON	c7c3e5ed-ae79-4b9a-adfd-6033f914cf92	trip fare adjust order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:03:55.333 +0530 IST	-0.07	-0.07	0	0	0	0	0	0	-0.07	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	f246aac6-3616-34c2-af29-f230cf90c37c	3ccff2c3-fb9b-4767-80be-1327a62f5a6c	ANANTHAKRISHNAN	R	157eadce-0944-4d3e-afda-eb38b50d2775	trip completed order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:04:00.496 +0530 IST	-4.9	341.38	-345.53	340.63	0	340.63	0.75	-0.75	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	8083007a-c74c-35b9-a0c6-fee60723a1d0	3ccff2c3-fb9b-4767-80be-1327a62f5a6c	ANANTHAKRISHNAN	R	157eadce-0944-4d3e-afda-eb38b50d2775	trip fare adjust order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:04:03.198 +0530 IST	-0.34	-0.34	0	0	0	0	0	0	-0.34	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	76591ae2-f2b6-3b17-be6a-e52bad93f65a	2639aa17-37d3-4c5f-84d3-e2bf385f2fc6	ABDUL	R	62797025-e0bf-4c0d-97c3-d52e8095e8eb	trip completed order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:04:44.144 +0530 IST	-4.9	186.48	-190.63	167.93	0	167.93	0.75	-0.75	0	0	0	0	0	17.8	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	46df80db-f6ba-3adf-ab99-535ae54ecd5b	2639aa17-37d3-4c5f-84d3-e2bf385f2fc6	ABDUL	R	62797025-e0bf-4c0d-97c3-d52e8095e8eb	trip fare adjust order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:04:46.663 +0530 IST	-0.19	-0.19	0	0	0	0	0	0	-0.19	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	330b1b61-1868-357b-9e79-d37f849bbe5a	8786a40c-b106-4e9f-b6ea-26aaee5e42a7	JOJI	JOSEPH	aca1aadf-bf3a-479b-9714-046f68c54128	trip completed order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:05:31.738 +0530 IST	-4.9	337.32	-341.47	336.57	0	336.57	0.75	-0.75	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	99e2525e-72c3-3d61-9f03-f43ae571fb59	8786a40c-b106-4e9f-b6ea-26aaee5e42a7	JOJI	JOSEPH	aca1aadf-bf3a-479b-9714-046f68c54128	trip fare adjust order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:05:34.451 +0530 IST	-0.34	-0.34	0	0	0	0	0	0	-0.34	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	ac4e7785-143e-3b47-a7dc-e38ccea15e61	eec16934-979f-4147-9947-2634a0fd144e	UMAR	FAROOQ	f7a2cd60-6ca8-4b69-8209-33dfd253ad59	trip completed order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:06:19.69 +0530 IST	-4.9	114.75	-118.9	114	0	114	0.75	-0.75	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	2eb66ea6-d784-3852-a230-749a7eebd2cd	eec16934-979f-4147-9947-2634a0fd144e	UMAR	FAROOQ	f7a2cd60-6ca8-4b69-8209-33dfd253ad59	trip fare adjust order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:06:22.374 +0530 IST	-0.11	-0.11	0	0	0	0	0	0	-0.11	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	e9a56e2b-6d7d-3d7e-b99d-9945068866ac	50107035-a79b-423c-acee-55cbd796ca81	NIKHIL	KUMAR.K.	3fd0b22a-9516-437f-8977-1b64a34d3a15	trip completed order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:08:58.498 +0530 IST	-4.9	550.38	-554.53	549.63	0	549.63	0.75	-0.75	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	23981028-34f8-3d1a-919e-a84cd2c099e9	50107035-a79b-423c-acee-55cbd796ca81	NIKHIL	KUMAR.K.	3fd0b22a-9516-437f-8977-1b64a34d3a15	trip fare adjust order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:09:01.118 +0530 IST	-0.55	-0.55	0	0	0	0	0	0	-0.55	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	eea8978a-7091-3e43-a0ea-762141f7190e	c802dce1-f11a-48e7-a47c-5a987b77eeed	MUHAMMED NISHAB M T	-	4998fefb-32ab-4fb0-8ce5-29f6a51c854f	trip completed order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:09:02.519 +0530 IST	-4.9	372.42	-376.57	371.67	0	371.67	0.75	-0.75	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	5b494691-087b-3094-b9bf-7bf8c7326629	c802dce1-f11a-48e7-a47c-5a987b77eeed	MUHAMMED NISHAB M T	-	4998fefb-32ab-4fb0-8ce5-29f6a51c854f	trip fare adjust order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:09:05.003 +0530 IST	-0.37	-0.37	0	0	0	0	0	0	-0.37	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	4c7e107d-cb36-39ab-abd5-d695c02f4a77	17b32831-2316-41b1-9eba-966c7beba240	ALTHAF	S	1058d9c8-edab-4415-9201-3a09e8c0a677	trip completed order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:09:23.804 +0530 IST	-4.9	422.28	-426.43	421.53	0	321.53	0.75	-0.75	0	0	0	0	0	0	100	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	77ad12ba-d935-3998-81a5-8f6bcd23dc16	17b32831-2316-41b1-9eba-966c7beba240	ALTHAF	S	1058d9c8-edab-4415-9201-3a09e8c0a677	trip fare adjust order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:09:26.321 +0530 IST	-0.42	-0.42	0	0	0	0	0	0	-0.42	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	97bb63a4-159f-34e3-9e6e-bc58af6dc1d6	aca1499d-e42f-4d18-9d47-aabd56ce9321	RITHISH	N	d531f574-bac5-441c-8d1f-2fbfdb7a55ba	trip completed order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:09:27.539 +0530 IST	-4.9	302.16	-306.31	301.41	0	301.41	0.75	-0.75	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	eaa46c52-8a07-3174-90fa-ce0d7663d8d6	aca1499d-e42f-4d18-9d47-aabd56ce9321	RITHISH	N	d531f574-bac5-441c-8d1f-2fbfdb7a55ba	trip fare adjust order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:09:30.218 +0530 IST	-0.3	-0.3	0	0	0	0	0	0	-0.3	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	26430c40-8df7-3ae8-88a6-cc9facac8a49	70631aaa-d01a-4298-b0a3-c177c49299ac	SALAHUDHEEN	FAROOK	6553bc61-2964-4bf0-a957-a29f45a36c75	trip completed order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:09:30.426 +0530 IST	804.78	691.03	0	684.78	0	584.78	6.25	-6.25	0	0	120	0	0	0	100	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	d7bca044-11ed-3362-93e6-809d2286a824	70631aaa-d01a-4298-b0a3-c177c49299ac	SALAHUDHEEN	FAROOK	6553bc61-2964-4bf0-a957-a29f45a36c75	trip fare adjust order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:09:33.45 +0530 IST	-0.8	-0.8	0	0	0	0	0	0	-0.8	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Uber Incentive	9f733c5b-11d8-383b-b68e-d45da696bd30	0305ac95-fb36-460c-afa9-0d1285d0fd18	SAMVREEDDHI MOBILITY	PRIVATE LIMITED		Vehicle Based Promotion for Maruti Suzuki Wagon R 2025 KA51AL1793 for completing 80 passenger trips, 	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:09:38.785 +0530 IST	600	600	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	600	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+TDS on Promotions	c7c3c860-ba41-3b1f-8c7a-427f50838156	0305ac95-fb36-460c-afa9-0d1285d0fd18	SAMVREEDDHI MOBILITY	PRIVATE LIMITED		India TDS on incentives	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:09:40.304 +0530 IST	-12	-12	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	-12	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Uber Incentive	f396d2ec-70d0-3996-bb40-171c47c91709	0305ac95-fb36-460c-afa9-0d1285d0fd18	SAMVREEDDHI MOBILITY	PRIVATE LIMITED		Vehicle Based Promotion for Maruti Suzuki Wagon R 2025 KA51AL1793 for completing 80 passenger trips, 	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:09:41.033 +0530 IST	25	25	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	25	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	dffbaf6b-8047-3110-8eae-03c14d6e8018	fc49ba06-48d9-4e9f-81e5-e62c3d95a425	MUBASHIR BIN JAFAR	-	81a86bf4-ac87-4c47-9768-9a8f21d71ebd	trip completed order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:09:42.266 +0530 IST	-4.9	392.9	-397.05	392.15	0	356.5	0.75	-0.75	0	0	0	0	0	0	0	35.65	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+TDS on Promotions	177764d7-1864-3add-8e5e-045d01220f90	0305ac95-fb36-460c-afa9-0d1285d0fd18	SAMVREEDDHI MOBILITY	PRIVATE LIMITED		India TDS on incentives	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:09:42.604 +0530 IST	-0.5	-0.5	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	-0.5	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	defa95cd-387a-3529-ae5e-dabd71f22b62	cc7d3f8a-348a-4767-8956-92b788fda25b	MUHAMMAD	ANSHIF	8cab40d4-7d31-4076-a702-e6d7bb9a74a5	trip completed order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:09:44.011 +0530 IST	65.1	182.29	-116.44	181.54	0	181.54	0.75	-0.75	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	eb01a12b-56c0-3ddc-9955-d7068aa97992	fc49ba06-48d9-4e9f-81e5-e62c3d95a425	MUBASHIR BIN JAFAR	-	81a86bf4-ac87-4c47-9768-9a8f21d71ebd	trip fare adjust order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:09:45.201 +0530 IST	-0.39	-0.39	0	0	0	0	0	0	-0.39	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	a81a8894-b2da-37f0-9035-32f6a63c5d70	cc7d3f8a-348a-4767-8956-92b788fda25b	MUHAMMAD	ANSHIF	8cab40d4-7d31-4076-a702-e6d7bb9a74a5	trip fare adjust order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:09:46.475 +0530 IST	-0.18	-0.18	0	0	0	0	0	0	-0.18	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	25a184aa-8b2a-3017-8599-836733c3cf2f	a1d4acaf-8d5c-4a8e-83b0-409c871a3339	NUHMAN	A	488ae5c3-ab19-432a-8e3a-04aae64a866e	trip completed order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:09:47.846 +0530 IST	485.16	493.85	0	485.16	0	405.16	8.69	-8.69	0	0	0	0	0	0	80	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	0c602218-7372-304f-be26-9d818a575a5c	a1d4acaf-8d5c-4a8e-83b0-409c871a3339	NUHMAN	A	488ae5c3-ab19-432a-8e3a-04aae64a866e	trip fare adjust order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:09:51.244 +0530 IST	-0.49	-0.49	0	0	0	0	0	0	-0.49	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	4f9ed454-3be5-3f03-9f77-842abf2df88a	364dc365-aefd-4b56-874e-de3660eb1305	MOHAMMAD	M	4ed351e5-bed3-4cc6-964a-be8c092a372c	trip completed order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:09:57.941 +0530 IST	597.74	603.99	0	597.74	0	497.74	6.25	-6.25	0	0	0	0	0	0	100	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	7707351a-03c8-3d0f-a36b-b4de45258a90	364dc365-aefd-4b56-874e-de3660eb1305	MOHAMMAD	M	4ed351e5-bed3-4cc6-964a-be8c092a372c	trip fare adjust order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:10:01.673 +0530 IST	-0.6	-0.6	0	0	0	0	0	0	-0.6	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	e77e6daa-a830-31d5-8233-464142aa7eb4	d3998d5f-fa9d-4ba2-8a48-0bc3835acd2d	SHIVAKUMAR	N	f3ca342e-e511-4c35-957a-67eb1edd20cc	trip completed order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:10:09.261 +0530 IST	-57	604.36	-652.67	595.67	0	515.67	8.69	-8.69	0	0	0	0	0	0	80	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Bank Transfer	f756746f-1f33-532f-ba71-ec4e71c54b2d	00000000-0000-0000-0000-000000000000				so.payout	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:10:10.087 +0530 IST	-75539.17	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	-75539.17	0	0	0	0	0	0	0	0	
+Ride Revenue	6c0603cb-da78-3984-9a90-d0373436f31c	d3998d5f-fa9d-4ba2-8a48-0bc3835acd2d	SHIVAKUMAR	N	f3ca342e-e511-4c35-957a-67eb1edd20cc	trip fare adjust order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:10:11.916 +0530 IST	-0.6	-0.6	0	0	0	0	0	0	-0.6	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	48209646-b499-3b61-975c-fb21ba825956	5c8b600e-38ea-48f7-b283-a29eed185126	SHAHOOD	P	835312ff-16ab-4672-9f74-4ce34c458936	trip completed order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:11:20.396 +0530 IST	-41	622.35	-777.1	586.12	0	486.12	6.25	-6.25	0	0	120	0	0	29.98	100	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	ebf6fb56-d399-3e0f-baf2-668cd3cdebaf	5c8b600e-38ea-48f7-b283-a29eed185126	SHAHOOD	P	835312ff-16ab-4672-9f74-4ce34c458936	trip fare adjust order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:11:23.212 +0530 IST	-0.74	-0.74	0	0	0	0	0	0	-0.74	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	e0df68ff-171d-33c7-8464-c96f62833bd0	5847b4db-6bae-4a0a-911b-53bb9b14278d	SUBIN	P P	b0938ab7-7d84-4c2f-93fc-43aae1329828	trip completed order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:11:30.166 +0530 IST	-4.9	308.39	-312.54	307.64	0	307.64	0.75	-0.75	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	cc3bd77b-a721-3c6a-876f-05d84889902b	5847b4db-6bae-4a0a-911b-53bb9b14278d	SUBIN	P P	b0938ab7-7d84-4c2f-93fc-43aae1329828	trip fare adjust order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:11:32.731 +0530 IST	-0.31	-0.31	0	0	0	0	0	0	-0.31	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	aa960320-7ac1-369f-9b46-958ea14bcc3a	bb5e1539-82d5-4ffd-a743-e3e451ca1083	SAJEEV	R	78bcce4e-5439-4f45-8a6c-07ead1f8f560	trip completed order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:11:32.907 +0530 IST	-305	571.05	-829.52	524.52	0	524.52	8.39	-46.53	0	0	0	0	0	0	0	0	0	0	0	38.14	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	3be3adb3-cdbb-330a-9c12-5cb9772c6a1a	bb5e1539-82d5-4ffd-a743-e3e451ca1083	SAJEEV	R	78bcce4e-5439-4f45-8a6c-07ead1f8f560	trip fare adjust order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:11:35.62 +0530 IST	-0.56	-0.56	0	0	0	0	0	0	-0.56	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	8addb127-50f3-389d-93c0-423c42b061a7	04c17dec-74d8-4dd6-b84f-8c3940ece565	MOHAMMED	P	0a3ce1b7-3af9-448d-a371-920605328081	trip completed order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:11:55.506 +0530 IST	63.74	191.96	-127.47	191.21	0	191.21	0.75	-0.75	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	e560e745-8850-30c9-9b2a-1e0aeb2a6165	04c17dec-74d8-4dd6-b84f-8c3940ece565	MOHAMMED	P	0a3ce1b7-3af9-448d-a371-920605328081	trip fare adjust order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:11:58.117 +0530 IST	-0.19	-0.19	0	0	0	0	0	0	-0.19	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	d4bec170-3bf0-39e0-89c6-6c5b45ec920b	a53e7841-f781-4977-9d70-1aa5df82de63	NISAR	-	1d262996-54a1-4729-b054-6ccc9b72912b	trip completed order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:12:20.712 +0530 IST	-4.9	90.75	-94.9	90	0	90	0.75	-0.75	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	c02cef7b-486d-3d0b-8997-19c5edda6d35	a53e7841-f781-4977-9d70-1aa5df82de63	NISAR	-	1d262996-54a1-4729-b054-6ccc9b72912b	trip fare adjust order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:12:23.379 +0530 IST	-0.09	-0.09	0	0	0	0	0	0	-0.09	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	008074b0-5d49-3423-907a-344df7e31473	c4444d32-d002-4c37-b7f9-89cffb157c43	SAHIL	A	3d218b82-e430-4179-9667-efd8a629684c	trip completed order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:12:37.014 +0530 IST	36.33	408.12	-371.04	407.37	0	370.34	0.75	-0.75	0	0	0	0	0	0	0	37.03	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	e240308f-816c-3ea6-8fc4-64edc0f92a57	c4444d32-d002-4c37-b7f9-89cffb157c43	SAHIL	A	3d218b82-e430-4179-9667-efd8a629684c	trip fare adjust order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:12:39.692 +0530 IST	-0.41	-0.41	0	0	0	0	0	0	-0.41	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	682ba3a9-a86c-3d7c-83b9-9ca0414512d4	feaafc1e-be75-4e29-b784-a85b378f1a06	NIKHIL	M	08fea911-3c61-4336-8527-927a8fdb1c2c	trip completed order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:12:41.36 +0530 IST	-41	759.44	-914.19	753.19	0	653.19	6.25	-6.25	0	0	120	0	0	0	100	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	d0d5589d-0ec2-37e4-8671-ad74196e6a18	feaafc1e-be75-4e29-b784-a85b378f1a06	NIKHIL	M	08fea911-3c61-4336-8527-927a8fdb1c2c	trip fare adjust order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:12:44.007 +0530 IST	-0.87	-0.87	0	0	0	0	0	0	-0.87	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	2dd9c958-8a7a-3021-975e-a2e83791302e	1ca0cbab-0996-4f81-905f-b48adc24ee22	ARSHAD	U	75cd6ce9-bb2d-46e0-a6bd-a241ac85072c	trip completed order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:12:50.29 +0530 IST	45.1	107.5	-61.65	106.75	0	106.75	0.75	-0.75	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	997eb728-5e74-3539-83d4-dcff2ef25073	1ca0cbab-0996-4f81-905f-b48adc24ee22	ARSHAD	U	75cd6ce9-bb2d-46e0-a6bd-a241ac85072c	trip fare adjust order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:12:52.71 +0530 IST	-0.11	-0.11	0	0	0	0	0	0	-0.11	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Platform Fee	86ac9b69-d364-3c46-b2f8-03b3aab41cd3	c4444d32-d002-4c37-b7f9-89cffb157c43	SAHIL	A		0% Drive Pass Payment - active from 3:34 AM - SAHIL A	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:12:55.703 +0530 IST	 -588.82 	0	0	0	0	0	0	0	0	0	0	0	-588.82	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	65e2199e-cc21-310b-8763-b9e33f5c88df	b65ee7d5-e3da-4536-87c9-faa1e002902c	BEJOY	BENZIGER	95eb7860-a795-43f3-a6b4-e0d3a1b404a2	trip completed order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:13:20.549 +0530 IST	46.71	253.9	-206.44	253.15	0	253.15	0.75	-0.75	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	257fceec-6999-37ae-9280-8e29d441d31c	b65ee7d5-e3da-4536-87c9-faa1e002902c	BEJOY	BENZIGER	95eb7860-a795-43f3-a6b4-e0d3a1b404a2	trip fare adjust order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:13:23.05 +0530 IST	-0.25	-0.25	0	0	0	0	0	0	-0.25	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	2c627813-a1e9-3e11-823e-ebdadab03314	499746ce-5cf6-46d2-b140-a7b275c961b9	ALAN	SUNNY	56bc1d66-e902-41ce-b81d-69516859faaa	trip completed order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:13:27.253 +0530 IST	-4.9	186.29	-190.44	185.54	0	185.54	0.75	-0.75	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	909594f9-12f2-3c5c-879f-1ddbd729a1ba	499746ce-5cf6-46d2-b140-a7b275c961b9	ALAN	SUNNY	56bc1d66-e902-41ce-b81d-69516859faaa	trip fare adjust order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:13:29.596 +0530 IST	-0.19	-0.19	0	0	0	0	0	0	-0.19	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	6e0da5aa-86da-3a5e-924f-243ecf3f0bc5	128f9c93-eb7f-4bb8-a6ce-d00eea83841a	REJOY K	MATHEW	621389e2-19ec-4812-aae5-2357cbcbfaa2	trip completed order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:13:31.694 +0530 IST	-57	579.24	-747.55	562.25	0	482.25	8.69	-8.69	0	0	120	0	0	8.3	80	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	c4020eba-d16d-36c3-a41e-1f490e614e52	128f9c93-eb7f-4bb8-a6ce-d00eea83841a	REJOY K	MATHEW	621389e2-19ec-4812-aae5-2357cbcbfaa2	trip fare adjust order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:13:34.478 +0530 IST	-0.69	-0.69	0	0	0	0	0	0	-0.69	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	825daf7c-e004-37e1-b498-49893a9b15fd	17447469-7614-4881-982d-889165212068	MELBIN	MATHEW	a523ed78-78ce-47f1-9c90-524bc77efc48	trip completed order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:13:52.067 +0530 IST	-4.9	148.99	-153.14	148.24	0	148.24	0.75	-0.75	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	804fb7b4-d674-3ee2-8121-f66aa39850a9	17447469-7614-4881-982d-889165212068	MELBIN	MATHEW	a523ed78-78ce-47f1-9c90-524bc77efc48	trip fare adjust order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:13:54.744 +0530 IST	-0.15	-0.15	0	0	0	0	0	0	-0.15	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Uber Incentive	22291b7e-fa0f-31e8-b89b-f328df5ecb84	251bb271-2e64-47d7-91e9-32a54c53a391	SAMVREEDDHI MOBILITY	BLR V		Vehicle Based Promotion for Maruti Suzuki Wagon R 2025 KA51AM2510 for completing 125 passenger trips, 	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:13:55.71 +0530 IST	1050	1050	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	1050	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+TDS on Promotions	fa020870-0de9-3121-8a8c-3716601c2490	251bb271-2e64-47d7-91e9-32a54c53a391	SAMVREEDDHI MOBILITY	BLR V		India TDS on incentives	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:13:57.224 +0530 IST	-21	-21	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	-21	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	1493b4e7-b5ba-3545-85fc-36b48234ffc3	7ae7cb2f-e479-4304-93e3-0474a311b860	KIRAN.	K	5cbf3b45-3d4b-42dd-86fa-16a5c8b6948c	trip completed order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:14:36.631 +0530 IST	-7.9	361.75	-368.9	361	0	212.35	0.75	-0.75	0	0	0	0	0	0	0	148.65	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	c0b90d53-2882-3f2b-8596-cb0b2b54d25d	7ae7cb2f-e479-4304-93e3-0474a311b860	KIRAN.	K	5cbf3b45-3d4b-42dd-86fa-16a5c8b6948c	trip fare adjust order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:14:38.803 +0530 IST	-0.36	-0.36	0	0	0	0	0	0	-0.36	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	832ef402-6f55-3488-a6c7-038ad4d9ba00	0d0c5dfa-582f-4f0c-9a09-3ff8f68f0b04	ASHIF	.K	7be0601c-0bf6-4b5a-9712-6f47725f12ff	trip completed order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:15:06.386 +0530 IST	-4.9	144.76	-148.91	144.01	0	144.01	0.75	-0.75	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	3d6dffde-7684-3dff-ba55-8331040584d5	0d0c5dfa-582f-4f0c-9a09-3ff8f68f0b04	ASHIF	.K	7be0601c-0bf6-4b5a-9712-6f47725f12ff	trip fare adjust order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:15:08.813 +0530 IST	-0.14	-0.14	0	0	0	0	0	0	-0.14	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Platform Fee	0538d994-8f3c-37ee-b336-87947c44d2da	0d0c5dfa-582f-4f0c-9a09-3ff8f68f0b04	ASHIF	.K		0% Drive Pass Payment - active from 4:03 AM - ASHIF .K	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:15:25.085 +0530 IST	 -789.42 	0	0	0	0	0	0	0	0	0	0	0	-789.42	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	3a0dae01-5e9a-3e1b-a630-a84b6fd09a08	bef10b20-f1d6-45aa-8618-cdf6d96fdb07	AFSAL	N	fd38b0bc-28ad-41fd-bc3f-483e071853d9	trip completed order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:15:50.409 +0530 IST	90	90	0	90	0	0	0	0	0	0	0	90	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	aa47ed0c-6039-31af-be78-1f939aa19922	bef10b20-f1d6-45aa-8618-cdf6d96fdb07	AFSAL	N	fd38b0bc-28ad-41fd-bc3f-483e071853d9	trip fare adjust order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:15:53.04 +0530 IST	-0.09	-0.09	0	0	0	0	0	0	-0.09	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	0df0310e-2cae-351c-ab44-361957f591b5	0b5d40f3-a2f6-4642-99aa-3379203808d1	MUHAMMED	V	b4f05a5b-1c1c-4c2a-b801-3aa27b901cee	trip completed order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:16:06.283 +0530 IST	59	59	0	59	0	0	0	0	0	0	0	59	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	c9b0c109-564c-38a3-a596-2966e8f9aa84	0b5d40f3-a2f6-4642-99aa-3379203808d1	MUHAMMED	V	b4f05a5b-1c1c-4c2a-b801-3aa27b901cee	trip fare adjust order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:16:08.971 +0530 IST	-0.06	-0.06	0	0	0	0	0	0	-0.06	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	2683b140-2e58-35dd-b32d-94b0d5be7c1b	6d8fbcc1-87d0-4815-a25d-c71ed012533c	WILSON	MATHEW	c67b2d0b-105a-4405-ba2d-2f888f9d480d	trip completed order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:16:13.218 +0530 IST	-57	517.68	-685.99	508.99	0	508.99	8.69	-8.69	0	0	120	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	e6f102d8-8b83-362d-acb5-652170cdd032	6d8fbcc1-87d0-4815-a25d-c71ed012533c	WILSON	MATHEW	c67b2d0b-105a-4405-ba2d-2f888f9d480d	trip fare adjust order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:16:16.305 +0530 IST	-0.63	-0.63	0	0	0	0	0	0	-0.63	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Platform Fee	21b5a162-df99-34e0-9d55-f1bd74a46895	6d8fbcc1-87d0-4815-a25d-c71ed012533c	WILSON	MATHEW		0% Drive Pass Payment - active from 3:16 AM - WILSON MATHEW	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:16:30.482 +0530 IST	 -789.42 	0	0	0	0	0	0	0	0	0	0	0	-789.42	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	
+Ride Revenue	25106eb1-e828-3474-9194-80cbf26b856b	3d860555-1f88-4d59-957d-7e2b961dc7ad	MOHAMMED	MUSTHAFA.C	a21bec7f-43ff-47fc-9b0e-68ca1b079df0	trip completed order	SAMVREEDDHI MOBILITY Pvt. Ltd. BLR P	SAMVREEDDHI MOBILITYPRIVATE LIMITED	2026-05-11 04:17:06.135 +0530 IST	-32.2	209.1	-352.61	200.41	0	200.41	8.69	-8.69	0	0	120	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	`;
+            
+            rawInput.value = sampleData;
+            showStatus("Sample dataset (56 rows) loaded! Click 'Parse & Map Distribution' to aggregate totals.", "bg-blue-100 text-blue-800");
+        }
+
+        // Icons
+        const getFolderIcon = (isOpen) => isOpen 
+            ? `<svg class="w-5 h-5 text-gray-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z"></path></svg>` 
+            : `<svg class="w-5 h-5 text-blue-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path></svg>`;
+        
+        const getFileIcon = () => `<svg class="w-5 h-5 text-gray-400 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>`;
+
+        const getChevron = (isOpen) => isOpen
+            ? `<svg class="w-4 h-4 text-gray-400 mr-1 flex-shrink-0 transition-transform transform rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>`
+            : `<svg class="w-4 h-4 text-gray-400 mr-1 flex-shrink-0 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>`;
+
+        // Initialize Tree with empty fields on page load
+        checkboxRegistry = {};
+        currentUberData = JSON.parse(JSON.stringify(baseUberDataTemplate));
+        renderTree(currentUberData, treeContainer);
+    </script>
+</body>
+</html>
