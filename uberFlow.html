@@ -18,14 +18,22 @@
     <script src="https://unpkg.com/lucide@latest"></script>
 
     <style>
+        :root {
+            --tree-font-size: 14px;
+        }
+
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
         
         /* Grid Overrides for compact horizontal viewing */
         .jexcel > tbody > tr > td { font-size: 13px; padding: 4px 8px; white-space: nowrap; }
         
-        /* Tree styling */
-        .tree-line { border-left: 1px solid #cbd5e1; margin-left: 9px; padding-left: 12px; border-radius: 0 0 0 4px; }
+        /* Tree styling & sizing variables */
+        .tree-line { border-left: 1px solid #cbd5e1; margin-left: 12px; padding-left: 12px; border-radius: 0 0 0 4px; }
         .node-hover:hover { background-color: #f1f5f9; }
+        .tree-text { font-size: var(--tree-font-size); }
+        .tree-amount { font-size: var(--tree-font-size); }
+        .tree-icon { width: calc(var(--tree-font-size) * 1.15); height: calc(var(--tree-font-size) * 1.15); }
+        .toggle-icon { width: calc(var(--tree-font-size) * 1); height: calc(var(--tree-font-size) * 1); }
         
         /* Custom scrollbars to save space */
         ::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -82,14 +90,37 @@
 
     <!-- Bottom Pane: Tree Visualization -->
     <section class="flex-1 bg-white flex flex-col relative overflow-hidden">
-        <div class="bg-slate-50 px-3 py-1.5 text-[11px] font-semibold text-slate-600 border-b border-slate-200 uppercase tracking-wider flex justify-between items-center">
+        <div class="bg-slate-50 px-3 py-1.5 text-[11px] font-semibold text-slate-600 border-b border-slate-200 uppercase tracking-wider flex flex-wrap gap-2 justify-between items-center">
             <div class="flex items-center gap-2">
                 <i data-lucide="network" class="w-3 h-3"></i> Auto-Generated Hierarchy Tree
             </div>
-            <!-- COPY TO EXCEL BUTTON -->
-            <button id="copy-excel-btn" onclick="copyTreeToExcel()" class="flex items-center gap-1.5 px-2 py-0.5 bg-white border border-slate-300 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 text-slate-500 rounded transition-colors shadow-sm cursor-pointer normal-case font-medium">
-                <i data-lucide="copy" class="w-3 h-3"></i> Copy to Excel
-            </button>
+            
+            <div class="flex items-center gap-2">
+                <!-- FONT SIZE ADJUSTMENT -->
+                <div class="flex items-center gap-1 bg-white border border-slate-300 rounded px-1 py-0.5 shadow-sm" title="Adjust text size">
+                    <span class="text-slate-400 font-bold px-1" style="font-size: 10px;">A</span>
+                    <button onclick="adjustFontSize(-1)" class="px-1.5 hover:bg-slate-100 hover:text-blue-600 rounded transition-colors">-</button>
+                    <span id="font-size-display" class="w-6 text-center text-[10px] normal-case text-slate-500">14px</span>
+                    <button onclick="adjustFontSize(1)" class="px-1.5 hover:bg-slate-100 hover:text-blue-600 rounded transition-colors">+</button>
+                </div>
+
+                <div class="h-4 w-px bg-slate-300 mx-1"></div>
+
+                <!-- EXPAND / COLLAPSE BUTTONS -->
+                <button onclick="expandAll()" class="flex items-center gap-1 px-2 py-0.5 bg-white border border-slate-300 hover:bg-slate-100 hover:text-slate-700 text-slate-500 rounded transition-colors shadow-sm cursor-pointer normal-case font-medium">
+                    <i data-lucide="chevrons-down" class="w-3 h-3"></i> Expand All
+                </button>
+                <button onclick="collapseAll()" class="flex items-center gap-1 px-2 py-0.5 bg-white border border-slate-300 hover:bg-slate-100 hover:text-slate-700 text-slate-500 rounded transition-colors shadow-sm cursor-pointer normal-case font-medium">
+                    <i data-lucide="chevrons-up" class="w-3 h-3"></i> Collapse All
+                </button>
+
+                <div class="h-4 w-px bg-slate-300 mx-1"></div>
+
+                <!-- COPY TO EXCEL BUTTON -->
+                <button id="copy-excel-btn" onclick="copyTreeToExcel()" class="flex items-center gap-1.5 px-2 py-0.5 bg-white border border-slate-300 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 text-slate-500 rounded transition-colors shadow-sm cursor-pointer normal-case font-medium">
+                    <i data-lucide="copy" class="w-3 h-3"></i> Copy to Excel
+                </button>
+            </div>
         </div>
         
         <!-- Tree Container -->
@@ -111,7 +142,7 @@
             <div class="p-5 flex flex-col gap-4">
                 <div class="flex justify-between items-end border-b border-slate-100 pb-3">
                     <span class="text-xs text-slate-400 uppercase tracking-wider font-semibold">Net Amount</span>
-                    <span id="panel-amount" class="text-2xl font-bold tracking-tight text-slate-800">$0.00</span>
+                    <span id="panel-amount" class="text-2xl font-bold tracking-tight text-slate-800">₹0.00</span>
                 </div>
                 <div>
                     <span class="text-xs text-slate-400 uppercase tracking-wider font-semibold">Data Path Logic</span>
@@ -139,7 +170,6 @@
 
         // -------------------------------------------------------------
         // 1. DATA MODEL (Horizontal 2-Row Format)
-        // Automatically maps amounts and colons from raw pasted exports
         // -------------------------------------------------------------
         const initialData = [
             [952737.76, 16030.00, -29099.04, -1001718.68, -947647.43, -54071.25, 11055.91, 4719.93, 10998.33, 57.58, 608.68, 4111.25, 301.83, 37765.09, -1035.00, 3420.00, -1253.03, -31261.72, 17938.52, -15775.84],
@@ -148,16 +178,18 @@
 
         let spreadsheetInstance = null;
         let globalNodeMap = {};
-        let globalRootNodes = []; // Used for the Excel export functionality
+        let globalRootNodes = []; 
+
+        let currentFontSize = 14;
 
         // -------------------------------------------------------------
-        // 2. INITIALIZE JSPREADSHEET (Horizontal Config)
+        // 2. INITIALIZE JSPREADSHEET 
         // -------------------------------------------------------------
         document.addEventListener('DOMContentLoaded', () => {
             const jss = jspreadsheet(document.getElementById('spreadsheet'), {
                 worksheets: [{
                     data: initialData,
-                    minDimensions: [25, 2], // 25 columns, 2 rows
+                    minDimensions: [25, 2], 
                     tableOverflow: true,
                     tableWidth: "100%",
                     tableHeight: "100%",
@@ -169,7 +201,7 @@
             });
 
             spreadsheetInstance = Array.isArray(jss) ? jss[0] : jss;
-            syncVisuals(); // Initial build
+            syncVisuals(); 
         });
 
         // -------------------------------------------------------------
@@ -181,10 +213,8 @@
             const rawData = spreadsheetInstance.getData();
             if (rawData.length < 2) return;
 
-            // SMART DETECTION: Which row is numbers, which is labels?
             let amountsRow, pathsRow;
             
-            // Count which row actually contains the hierarchy separators (colons)
             const colonsRow0 = rawData[0].filter(v => v && String(v).includes(':')).length;
             const colonsRow1 = rawData[1].filter(v => v && String(v).includes(':')).length;
             
@@ -195,7 +225,6 @@
                 pathsRow = rawData[1];
                 amountsRow = rawData[0];
             } else {
-                // Fallback: which row has more text strings? (ignoring empty cells)
                 const textRow0 = rawData[0].filter(v => v && isNaN(Number(v))).length;
                 const textRow1 = rawData[1].filter(v => v && isNaN(Number(v))).length;
                 
@@ -215,7 +244,6 @@
                 if (!pathsRow[i] || String(pathsRow[i]).trim() === "") continue;
                 
                 const originalStr = String(pathsRow[i]);
-                // Split by colon, trim spaces, standardise casing for keys (to prevent Booking fee vs Booking Fee bug)
                 const parts = originalStr.split(':').map(p => p.trim());
                 const keyPath = parts.map(p => p.toLowerCase()).join(':');
                 
@@ -225,10 +253,10 @@
                 globalNodeMap[keyPath] = {
                     id: keyPath,
                     originalPath: originalStr,
-                    label: parts[parts.length - 1], // The last part is the display name
+                    label: parts[parts.length - 1], 
                     amount: amt,
                     children: [],
-                    isExplicitlyProvided: true // We got this amount directly from the grid
+                    isExplicitlyProvided: true 
                 };
             }
 
@@ -238,7 +266,6 @@
                 for (let i = 1; i < parts.length; i++) {
                     const parentKey = parts.slice(0, i).join(':');
                     if (!globalNodeMap[parentKey]) {
-                        // Creating an implicit parent
                         const originalParts = node.originalPath.split(':').map(p=>p.trim());
                         globalNodeMap[parentKey] = {
                             id: parentKey,
@@ -246,7 +273,7 @@
                             label: originalParts[i - 1],
                             amount: 0,
                             children: [],
-                            isExplicitlyProvided: false // Was not in grid, auto-created to hold children
+                            isExplicitlyProvided: false 
                         };
                     }
                 }
@@ -264,7 +291,7 @@
                 }
             });
 
-            // Pass 4: Auto-Sum ONLY for implicit nodes (Don't overwrite explicitly provided parent amounts!)
+            // Pass 4: Auto-Sum ONLY for implicit nodes
             function calculateRollups(node) {
                 if (node.children.length === 0) return node.amount;
                 
@@ -277,15 +304,13 @@
                     node.amount = childrenSum;
                     node.autoSummed = true;
                 } else {
-                    // Mismatch Check: Compare Explicit Grid Value vs Sum of Children
                     const diff = Math.abs(node.amount - childrenSum);
-                    if (diff > 0.05) { // 5 cents tolerance for float math rounding
+                    if (diff > 0.05) { 
                         node.hasMismatch = true;
                         node.calculatedSum = childrenSum;
-                        node.originalGridValue = node.amount; // Save original for UI
+                        node.originalGridValue = node.amount;
                         node.mismatchDiff = diff;
                         
-                        // OVERRIDE with correct children sum if grid value is 0 or wrong
                         node.amount = childrenSum;
                     }
                 }
@@ -294,7 +319,6 @@
 
             rootNodes.forEach(root => calculateRollups(root));
             
-            // Save to global variable so copyTreeToExcel can access it
             globalRootNodes = rootNodes;
 
             // Pass 5: Render DOM
@@ -316,9 +340,9 @@
             const isNegative = node.amount < 0;
             const isZero = node.amount === 0;
             
-            const formatCurrency = (val) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(val);
+            // Replaced generic US format with Indian Number System (en-IN)
+            const formatCurrency = (val) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(val);
 
-            // Styling logic
             let amountColor = 'text-slate-400';
             if (isNegative) amountColor = 'text-rose-600';
             else if (!isZero) amountColor = 'text-emerald-600';
@@ -326,27 +350,31 @@
             const icon = hasChildren ? 'folder-open' : 'file-text';
             const iconColor = hasChildren ? 'text-blue-500' : 'text-slate-400';
 
-            // Node Row HTML
+            // Custom toggle button for expanding/collapsing
+            const toggleHtml = hasChildren 
+                ? `<div class="cursor-pointer p-0.5 hover:bg-slate-200 rounded toggle-btn transition-transform transform rotate-0" onclick="toggleNode(this, event)"><i data-lucide="chevron-down" class="toggle-icon text-slate-500"></i></div>`
+                : `<div class="w-4"></div>`; // Empty spacer for leaf nodes to keep alignment
+
             const rowHtml = `
                 <div class="flex items-center justify-between py-1.5 px-2 rounded cursor-pointer node-hover group border border-transparent hover:border-slate-200 transition-all duration-150" 
                      onclick="openPanel('${node.id}', event)">
-                    <div class="flex items-center gap-2.5">
-                        <i data-lucide="${icon}" class="w-4 h-4 ${iconColor}"></i>
-                        <span class="text-sm font-medium text-slate-700 group-hover:text-blue-600">${node.label}</span>
+                    <div class="flex items-center gap-2">
+                        ${toggleHtml}
+                        <i data-lucide="${icon}" class="tree-icon ${iconColor}"></i>
+                        <span class="tree-text font-medium text-slate-700 group-hover:text-blue-600">${node.label}</span>
                         ${node.autoSummed ? `<span class="bg-blue-50 text-blue-500 border border-blue-100 text-[9px] uppercase px-1.5 py-0.5 rounded ml-1 tracking-wider hidden sm:inline-block">Auto-Sum</span>` : ''}
                         ${node.hasMismatch ? `<span class="bg-amber-50 text-amber-600 border border-amber-200 text-[9px] uppercase px-1.5 py-0.5 rounded ml-1 tracking-wider flex items-center gap-1" title="Math mismatch"><i data-lucide="alert-triangle" class="w-3 h-3"></i> Auto-Corrected</span>` : ''}
                     </div>
                     <div class="flex items-center gap-4">
-                        <span class="text-[13px] font-semibold ${amountColor}">${formatCurrency(node.amount)}</span>
+                        <span class="tree-amount font-semibold ${amountColor}">${formatCurrency(node.amount)}</span>
                     </div>
                 </div>
             `;
             div.innerHTML = rowHtml;
 
-            // Render Children Recursively
             if (hasChildren) {
                 const childrenContainer = document.createElement('div');
-                childrenContainer.className = 'tree-line';
+                childrenContainer.className = 'tree-line children-container';
                 node.children.forEach(child => {
                     childrenContainer.appendChild(createTreeNode(child));
                 });
@@ -357,17 +385,52 @@
         }
 
         // -------------------------------------------------------------
-        // 5. FLOATING PANEL CONTROLS
+        // 5. INTERACTIVE CONTROLS (Expand/Collapse, Font Size, Panel)
         // -------------------------------------------------------------
+        function toggleNode(btnElement, event) {
+            event.stopPropagation();
+            const rowDiv = btnElement.closest('div.justify-between');
+            const childrenContainer = rowDiv.nextElementSibling;
+            
+            if (childrenContainer && childrenContainer.classList.contains('children-container')) {
+                const isHidden = childrenContainer.classList.contains('hidden');
+                if (isHidden) {
+                    childrenContainer.classList.remove('hidden');
+                    btnElement.classList.remove('-rotate-90');
+                } else {
+                    childrenContainer.classList.add('hidden');
+                    btnElement.classList.add('-rotate-90');
+                }
+            }
+        }
+
+        function expandAll() {
+            document.querySelectorAll('.children-container').forEach(el => el.classList.remove('hidden'));
+            document.querySelectorAll('.toggle-btn').forEach(el => el.classList.remove('-rotate-90'));
+        }
+
+        function collapseAll() {
+            document.querySelectorAll('.children-container').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.toggle-btn').forEach(el => el.classList.add('-rotate-90'));
+        }
+
+        function adjustFontSize(change) {
+            currentFontSize += change;
+            if (currentFontSize < 10) currentFontSize = 10;
+            if (currentFontSize > 24) currentFontSize = 24;
+            
+            document.getElementById('font-size-display').innerText = currentFontSize + 'px';
+            document.documentElement.style.setProperty('--tree-font-size', currentFontSize + 'px');
+        }
+
         function openPanel(nodeId, event) {
             event.stopPropagation();
-            
             const node = globalNodeMap[nodeId];
             if (!node) return;
 
-            const formatCurrency = (val) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(val);
+            // Updated to Indian Number System formatting
+            const formatCurrency = (val) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(val);
 
-            // Parse parent for UI
             const pathParts = node.originalPath.split(':').map(p=>p.trim());
             const parentName = pathParts.length > 1 ? pathParts[pathParts.length - 2] : 'ROOT LEVEL';
 
@@ -379,7 +442,6 @@
             amtEl.innerText = formatCurrency(node.amount);
             amtEl.className = `text-3xl font-bold tracking-tight ${node.amount < 0 ? 'text-rose-500' : (node.amount > 0 ? 'text-emerald-500' : 'text-slate-800')}`;
 
-            // Inject status badges based on how the node got its value
             const statusContainer = document.getElementById('panel-status-container');
             if (node.isExplicitlyProvided) {
                 statusContainer.innerHTML = `<span class="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-1 rounded text-xs font-semibold"><i data-lucide="check-circle" class="w-3 h-3"></i> Value From Grid</span>`;
@@ -389,7 +451,6 @@
                 statusContainer.innerHTML = '';
             }
 
-            // Show Mismatch Box if needed
             const mismatchContainer = document.getElementById('panel-mismatch-container');
             if (node.hasMismatch) {
                 mismatchContainer.classList.remove('hidden');
@@ -398,10 +459,8 @@
                 mismatchContainer.classList.add('hidden');
             }
 
-            // Update icons for the dynamic badge
             lucide.createIcons();
 
-            // Show Panel
             const panel = document.getElementById('floating-panel');
             panel.classList.remove('hidden-panel');
             panel.classList.add('visible-panel');
@@ -418,22 +477,15 @@
         // -------------------------------------------------------------
         function clearGrid() {
             if (!spreadsheetInstance) return;
-            
-            // Create an empty 2x25 array to wipe the grid
             const emptyData = Array(2).fill().map(() => Array(25).fill(''));
             spreadsheetInstance.setData(emptyData);
-            
-            // Close the panel if it's open
             closePanel();
-            
-            // Sync visuals to clear the tree
             syncVisuals();
         }
 
         function copyTreeToExcel() {
             if (!globalRootNodes || globalRootNodes.length === 0) return;
 
-            // First pass: find max depth of the tree to know how many columns we need
             function maxDepth(node, d) {
                 if (!node.children || node.children.length === 0) return d;
                 return Math.max(...node.children.map(c => maxDepth(c, d + 1)));
@@ -447,17 +499,14 @@
             const rows = [];
             const header = [];
             
-            // Setup Headers (e.g. Level 1 Node | Level 1 Amount | Level 2 Node | Level 2 Amount)
             for (let i = 1; i <= depth; i++) {
                 header.push(`Level ${i} Node`, `Amount`);
             }
             rows.push(header);
 
-            // Walk the tree and place labels/amounts into appropriate array indices to stair-step columns
             function walk(node, level) {
                 const cols = new Array(depth * 2).fill('');
                 
-                // level * 2 ensures the label goes into the correct column, and amount in the next one
                 cols[level * 2] = node.label;
                 cols[level * 2 + 1] = (node.amount !== undefined && !isNaN(node.amount)) ? node.amount.toFixed(2) : '';
                 
@@ -470,14 +519,11 @@
 
             globalRootNodes.forEach(root => walk(root, 0));
 
-            // Format as Tab-Separated Values (TSV) which pastes perfectly into Excel/Sheets
             const tsv = rows.map(row => row.join('\t')).join('\r\n');
 
-            // Attempt clipboard copy
             navigator.clipboard.writeText(tsv).then(() => {
                 showCopySuccess();
             }).catch(() => {
-                // Fallback for strict browser permissions (like within iFrames)
                 const ta = document.createElement('textarea');
                 ta.value = tsv;
                 ta.style.position = 'fixed';
