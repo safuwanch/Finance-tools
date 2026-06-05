@@ -82,8 +82,14 @@
 
     <!-- Bottom Pane: Tree Visualization -->
     <section class="flex-1 bg-white flex flex-col relative overflow-hidden">
-        <div class="bg-slate-50 px-3 py-1.5 text-[11px] font-semibold text-slate-600 border-b border-slate-200 uppercase tracking-wider flex items-center gap-2">
-            <i data-lucide="network" class="w-3 h-3"></i> Auto-Generated Hierarchy Tree
+        <div class="bg-slate-50 px-3 py-1.5 text-[11px] font-semibold text-slate-600 border-b border-slate-200 uppercase tracking-wider flex justify-between items-center">
+            <div class="flex items-center gap-2">
+                <i data-lucide="network" class="w-3 h-3"></i> Auto-Generated Hierarchy Tree
+            </div>
+            <!-- COPY TO EXCEL BUTTON -->
+            <button id="copy-excel-btn" onclick="copyTreeToExcel()" class="flex items-center gap-1.5 px-2 py-0.5 bg-white border border-slate-300 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 text-slate-500 rounded transition-colors shadow-sm cursor-pointer normal-case font-medium">
+                <i data-lucide="copy" class="w-3 h-3"></i> Copy to Excel
+            </button>
         </div>
         
         <!-- Tree Container -->
@@ -142,6 +148,7 @@
 
         let spreadsheetInstance = null;
         let globalNodeMap = {};
+        let globalRootNodes = []; // Used for the Excel export functionality
 
         // -------------------------------------------------------------
         // 2. INITIALIZE JSPREADSHEET (Horizontal Config)
@@ -275,13 +282,20 @@
                     if (diff > 0.05) { // 5 cents tolerance for float math rounding
                         node.hasMismatch = true;
                         node.calculatedSum = childrenSum;
+                        node.originalGridValue = node.amount; // Save original for UI
                         node.mismatchDiff = diff;
+                        
+                        // OVERRIDE with correct children sum if grid value is 0 or wrong
+                        node.amount = childrenSum;
                     }
                 }
                 return node.amount;
             }
 
             rootNodes.forEach(root => calculateRollups(root));
+            
+            // Save to global variable so copyTreeToExcel can access it
+            globalRootNodes = rootNodes;
 
             // Pass 5: Render DOM
             const container = document.getElementById('tree-container');
@@ -320,7 +334,7 @@
                         <i data-lucide="${icon}" class="w-4 h-4 ${iconColor}"></i>
                         <span class="text-sm font-medium text-slate-700 group-hover:text-blue-600">${node.label}</span>
                         ${node.autoSummed ? `<span class="bg-blue-50 text-blue-500 border border-blue-100 text-[9px] uppercase px-1.5 py-0.5 rounded ml-1 tracking-wider hidden sm:inline-block">Auto-Sum</span>` : ''}
-                        ${node.hasMismatch ? `<span class="bg-amber-50 text-amber-600 border border-amber-200 text-[9px] uppercase px-1.5 py-0.5 rounded ml-1 tracking-wider flex items-center gap-1" title="Math mismatch"><i data-lucide="alert-triangle" class="w-3 h-3"></i> Diff</span>` : ''}
+                        ${node.hasMismatch ? `<span class="bg-amber-50 text-amber-600 border border-amber-200 text-[9px] uppercase px-1.5 py-0.5 rounded ml-1 tracking-wider flex items-center gap-1" title="Math mismatch"><i data-lucide="alert-triangle" class="w-3 h-3"></i> Auto-Corrected</span>` : ''}
                     </div>
                     <div class="flex items-center gap-4">
                         <span class="text-[13px] font-semibold ${amountColor}">${formatCurrency(node.amount)}</span>
@@ -379,7 +393,7 @@
             const mismatchContainer = document.getElementById('panel-mismatch-container');
             if (node.hasMismatch) {
                 mismatchContainer.classList.remove('hidden');
-                document.getElementById('panel-mismatch-text').innerHTML = `Grid Value: <strong>${formatCurrency(node.amount)}</strong><br>Sum of Children: <strong>${formatCurrency(node.calculatedSum)}</strong><br>Discrepancy: <strong class="text-red-600">${formatCurrency(node.mismatchDiff)}</strong>`;
+                document.getElementById('panel-mismatch-text').innerHTML = `Grid Value: <strong class="line-through text-slate-500">${formatCurrency(node.originalGridValue)}</strong> (Overridden)<br>Sum of Children: <strong>${formatCurrency(node.calculatedSum)}</strong><br>Discrepancy: <strong class="text-red-600">${formatCurrency(node.mismatchDiff)}</strong>`;
             } else {
                 mismatchContainer.classList.add('hidden');
             }
@@ -400,7 +414,7 @@
         }
 
         // -------------------------------------------------------------
-        // 6. UTILITY FUNCTIONS
+        // 6. UTILITY FUNCTIONS (Clear Grid & Export to Excel)
         // -------------------------------------------------------------
         function clearGrid() {
             if (!spreadsheetInstance) return;
@@ -414,6 +428,84 @@
             
             // Sync visuals to clear the tree
             syncVisuals();
+        }
+
+        function copyTreeToExcel() {
+            if (!globalRootNodes || globalRootNodes.length === 0) return;
+
+            // First pass: find max depth of the tree to know how many columns we need
+            function maxDepth(node, d) {
+                if (!node.children || node.children.length === 0) return d;
+                return Math.max(...node.children.map(c => maxDepth(c, d + 1)));
+            }
+            
+            let depth = 1;
+            globalRootNodes.forEach(root => {
+                depth = Math.max(depth, maxDepth(root, 1));
+            });
+
+            const rows = [];
+            const header = [];
+            
+            // Setup Headers (e.g. Level 1 Node | Level 1 Amount | Level 2 Node | Level 2 Amount)
+            for (let i = 1; i <= depth; i++) {
+                header.push(`Level ${i} Node`, `Amount`);
+            }
+            rows.push(header);
+
+            // Walk the tree and place labels/amounts into appropriate array indices to stair-step columns
+            function walk(node, level) {
+                const cols = new Array(depth * 2).fill('');
+                
+                // level * 2 ensures the label goes into the correct column, and amount in the next one
+                cols[level * 2] = node.label;
+                cols[level * 2 + 1] = (node.amount !== undefined && !isNaN(node.amount)) ? node.amount.toFixed(2) : '';
+                
+                rows.push(cols);
+                
+                if (node.children && node.children.length > 0) {
+                    node.children.forEach(child => walk(child, level + 1));
+                }
+            }
+
+            globalRootNodes.forEach(root => walk(root, 0));
+
+            // Format as Tab-Separated Values (TSV) which pastes perfectly into Excel/Sheets
+            const tsv = rows.map(row => row.join('\t')).join('\r\n');
+
+            // Attempt clipboard copy
+            navigator.clipboard.writeText(tsv).then(() => {
+                showCopySuccess();
+            }).catch(() => {
+                // Fallback for strict browser permissions (like within iFrames)
+                const ta = document.createElement('textarea');
+                ta.value = tsv;
+                ta.style.position = 'fixed';
+                ta.style.opacity = '0';
+                document.body.appendChild(ta);
+                ta.focus();
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+                showCopySuccess();
+            });
+        }
+
+        function showCopySuccess() {
+            const btn = document.getElementById('copy-excel-btn');
+            const originalHTML = btn.innerHTML;
+            
+            btn.innerHTML = `<i data-lucide="check-circle-2" class="w-3 h-3"></i> Copied!`;
+            btn.classList.add('bg-emerald-50', 'text-emerald-600', 'border-emerald-200');
+            btn.classList.remove('bg-white', 'text-slate-500', 'border-slate-300', 'hover:bg-blue-50', 'hover:text-blue-600');
+            lucide.createIcons();
+            
+            setTimeout(() => {
+                btn.innerHTML = originalHTML;
+                btn.classList.remove('bg-emerald-50', 'text-emerald-600', 'border-emerald-200');
+                btn.classList.add('bg-white', 'text-slate-500', 'border-slate-300', 'hover:bg-blue-50', 'hover:text-blue-600');
+                lucide.createIcons();
+            }, 2000);
         }
     </script>
 </body>
