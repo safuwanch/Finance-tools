@@ -93,6 +93,8 @@
         <div class="bg-slate-50 px-3 py-1.5 text-[11px] font-semibold text-slate-600 border-b border-slate-200 uppercase tracking-wider flex flex-wrap gap-2 justify-between items-center">
             <div class="flex items-center gap-2">
                 <i data-lucide="network" class="w-3 h-3"></i> Auto-Generated Hierarchy Tree
+                <!-- VALIDATION BADGE -->
+                <div id="node-counts-badge" class="hidden"></div>
             </div>
             
             <div class="flex items-center gap-2">
@@ -158,6 +160,16 @@
                         <div>
                             <h4 class="text-[10px] font-bold text-amber-800 uppercase tracking-wider">Math Mismatch</h4>
                             <p class="text-[11px] text-amber-700 mt-1 leading-snug" id="panel-mismatch-text"></p>
+                        </div>
+                    </div>
+                </div>
+                <!-- Duplicate Alert Box -->
+                <div id="panel-duplicate-container" class="hidden mt-2 p-3 bg-rose-50 border border-rose-200 rounded-lg">
+                    <div class="flex items-start gap-2">
+                        <i data-lucide="alert-circle" class="w-4 h-4 text-rose-600 mt-0.5"></i>
+                        <div>
+                            <h4 class="text-[10px] font-bold text-rose-800 uppercase tracking-wider">Duplicate Column</h4>
+                            <p class="text-[11px] text-rose-700 mt-1 leading-snug">This column appeared multiple times in your input grid. It has been added as a separate item so you don't lose the number.</p>
                         </div>
                     </div>
                 </div>
@@ -238,25 +250,47 @@
             }
 
             globalNodeMap = {};
+            let pathCounts = {};
+            let pastedColCount = 0;
 
-            // Pass 1: Parse provided nodes
+            // Pass 1: Parse provided nodes & Handle Duplicates
             for (let i = 0; i < pathsRow.length; i++) {
                 if (!pathsRow[i] || String(pathsRow[i]).trim() === "") continue;
                 
+                pastedColCount++;
+
                 const originalStr = String(pathsRow[i]);
                 const parts = originalStr.split(':').map(p => p.trim());
-                const keyPath = parts.map(p => p.toLowerCase()).join(':');
+                const baseKeyPath = parts.map(p => p.toLowerCase()).join(':');
+                
+                // Track duplicates
+                pathCounts[baseKeyPath] = (pathCounts[baseKeyPath] || 0) + 1;
+                
+                let isDuplicate = false;
+                let finalParts = [...parts];
+                let finalOriginalStr = originalStr;
+
+                // Handle duplicates by appending a suffix so they don't overwrite each other
+                if (pathCounts[baseKeyPath] > 1) {
+                    isDuplicate = true;
+                    const dupSuffix = ` (Dup ${pathCounts[baseKeyPath] - 1})`;
+                    finalParts[finalParts.length - 1] = finalParts[finalParts.length - 1] + dupSuffix;
+                    finalOriginalStr = originalStr + dupSuffix;
+                }
+
+                const keyPath = finalParts.map(p => p.toLowerCase()).join(':');
                 
                 let amt = parseFloat(String(amountsRow[i]).replace(/,/g, ''));
                 if (isNaN(amt)) amt = 0;
 
                 globalNodeMap[keyPath] = {
                     id: keyPath,
-                    originalPath: originalStr,
-                    label: parts[parts.length - 1], 
+                    originalPath: finalOriginalStr,
+                    label: finalParts[finalParts.length - 1], 
                     amount: amt,
                     children: [],
-                    isExplicitlyProvided: true 
+                    isExplicitlyProvided: true,
+                    isDuplicate: isDuplicate
                 };
             }
 
@@ -291,7 +325,7 @@
                 }
             });
 
-            // Pass 4: Auto-Sum ONLY for implicit nodes
+            // Pass 4: Auto-Sum ONLY for implicit nodes & detect mismatches
             function calculateRollups(node) {
                 if (node.children.length === 0) return node.amount;
                 
@@ -320,6 +354,23 @@
             rootNodes.forEach(root => calculateRollups(root));
             
             globalRootNodes = rootNodes;
+
+            // Verify Data Integrity: Compare pasted columns vs explicit nodes mapped
+            let explicitNodeCount = Object.values(globalNodeMap).filter(n => n.isExplicitlyProvided).length;
+            const countsBadge = document.getElementById('node-counts-badge');
+            
+            if (pastedColCount > 0) {
+                countsBadge.classList.remove('hidden');
+                if (pastedColCount === explicitNodeCount) {
+                    countsBadge.innerHTML = `<i data-lucide="check-circle" class="w-3 h-3"></i> <span>Cols: ${pastedColCount} = Mapped: ${explicitNodeCount}</span>`;
+                    countsBadge.className = "ml-2 bg-emerald-50 text-emerald-600 border border-emerald-200 px-1.5 py-0.5 rounded flex items-center gap-1 text-[9px] tracking-wider font-bold";
+                } else {
+                    countsBadge.innerHTML = `<i data-lucide="alert-triangle" class="w-3 h-3"></i> <span>Cols: ${pastedColCount} ≠ Mapped: ${explicitNodeCount}</span>`;
+                    countsBadge.className = "ml-2 bg-amber-50 text-amber-600 border border-amber-200 px-1.5 py-0.5 rounded flex items-center gap-1 text-[9px] tracking-wider font-bold";
+                }
+            } else {
+                countsBadge.classList.add('hidden');
+            }
 
             // Pass 5: Render DOM
             const container = document.getElementById('tree-container');
@@ -364,6 +415,7 @@
                         <span class="tree-text font-medium text-slate-700 group-hover:text-blue-600">${node.label}</span>
                         ${node.autoSummed ? `<span class="bg-blue-50 text-blue-500 border border-blue-100 text-[9px] uppercase px-1.5 py-0.5 rounded ml-1 tracking-wider hidden sm:inline-block">Auto-Sum</span>` : ''}
                         ${node.hasMismatch ? `<span class="bg-amber-50 text-amber-600 border border-amber-200 text-[9px] uppercase px-1.5 py-0.5 rounded ml-1 tracking-wider flex items-center gap-1" title="Math mismatch"><i data-lucide="alert-triangle" class="w-3 h-3"></i> Auto-Corrected</span>` : ''}
+                        ${node.isDuplicate ? `<span class="bg-rose-50 text-rose-600 border border-rose-200 text-[9px] uppercase px-1.5 py-0.5 rounded ml-1 tracking-wider flex items-center gap-1" title="Duplicate Column"><i data-lucide="alert-circle" class="w-3 h-3"></i> Duplicate</span>` : ''}
                     </div>
                     <div class="flex items-center gap-4">
                         <span class="tree-amount font-semibold ${amountColor}">${formatCurrency(node.amount)}</span>
@@ -443,13 +495,14 @@
             amtEl.className = `text-3xl font-bold tracking-tight ${node.amount < 0 ? 'text-rose-500' : (node.amount > 0 ? 'text-emerald-500' : 'text-slate-800')}`;
 
             const statusContainer = document.getElementById('panel-status-container');
+            let badgesHtml = '';
+
             if (node.isExplicitlyProvided) {
-                statusContainer.innerHTML = `<span class="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-1 rounded text-xs font-semibold"><i data-lucide="check-circle" class="w-3 h-3"></i> Value From Grid</span>`;
+                badgesHtml += `<span class="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-1 rounded text-xs font-semibold"><i data-lucide="check-circle" class="w-3 h-3"></i> Value From Grid</span>`;
             } else if (node.autoSummed) {
-                statusContainer.innerHTML = `<span class="inline-flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-200 px-2 py-1 rounded text-xs font-semibold"><i data-lucide="calculator" class="w-3 h-3"></i> Auto-Summed from Children</span>`;
-            } else {
-                statusContainer.innerHTML = '';
+                badgesHtml += `<span class="inline-flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-200 px-2 py-1 rounded text-xs font-semibold"><i data-lucide="calculator" class="w-3 h-3"></i> Auto-Summed from Children</span>`;
             }
+            statusContainer.innerHTML = badgesHtml;
 
             const mismatchContainer = document.getElementById('panel-mismatch-container');
             if (node.hasMismatch) {
@@ -457,6 +510,13 @@
                 document.getElementById('panel-mismatch-text').innerHTML = `Grid Value: <strong class="line-through text-slate-500">${formatCurrency(node.originalGridValue)}</strong> (Overridden)<br>Sum of Children: <strong>${formatCurrency(node.calculatedSum)}</strong><br>Discrepancy: <strong class="text-red-600">${formatCurrency(node.mismatchDiff)}</strong>`;
             } else {
                 mismatchContainer.classList.add('hidden');
+            }
+
+            const duplicateContainer = document.getElementById('panel-duplicate-container');
+            if (node.isDuplicate) {
+                duplicateContainer.classList.remove('hidden');
+            } else {
+                duplicateContainer.classList.add('hidden');
             }
 
             lucide.createIcons();
