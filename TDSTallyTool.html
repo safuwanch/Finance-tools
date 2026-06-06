@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -83,17 +84,21 @@
                 </div>
             </label>
         </div>
+        
+        <!-- Error Message Container inside Modal -->
+        <div id="export-error-msg" class="hidden-panel mb-5 p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs font-mono rounded-lg break-words"></div>
+
         <div class="flex gap-3">
-            <button onclick="closeExportModal()" class="flex-1 px-4 py-2 bg-white border border-slate-200 text-slate-700 font-medium rounded-lg hover:bg-slate-50 transition-colors text-sm">Cancel</button>
-            <button onclick="doExport()" class="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors text-sm flex items-center justify-center gap-2">
-                <i data-lucide="file-spreadsheet" class="w-4 h-4"></i> Export
+            <button onclick="closeExportModal()" id="modal-cancel-btn" class="flex-1 px-4 py-2 bg-white border border-slate-200 text-slate-700 font-medium rounded-lg hover:bg-slate-50 transition-colors text-sm">Cancel</button>
+            <button onclick="doExport()" id="modal-export-btn" class="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors text-sm flex items-center justify-center gap-2">
+                <i data-lucide="file-spreadsheet" class="w-4 h-4"></i> <span id="modal-export-text">Export</span>
             </button>
         </div>
     </div>
 </div>
 
 <!-- Sidebar -->
-<aside class="w-64 bg-white border-r border-slate-200 flex flex-col relative z-20 shadow-sm">
+<aside class="w-64 bg-white border-r border-slate-200 flex flex-col relative z-20 shadow-sm shrink-0">
     <div class="p-6">
         <h1 class="text-xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
             <i data-lucide="database" class="text-indigo-600 w-6 h-6"></i> TDS Auditor
@@ -131,77 +136,78 @@
 </aside>
 
 <!-- Main Content -->
-<main class="flex-1 flex flex-col relative z-10 bg-slate-50/50">
-    <header class="h-16 border-b border-slate-200 bg-white/80 backdrop-blur-md flex items-center justify-between px-8 flex-shrink-0 z-20 shadow-sm">
-        <div class="flex items-center text-sm font-medium text-slate-500">
-            Workspace <i data-lucide="chevron-right" class="w-3.5 h-3.5 mx-2 opacity-40"></i>
-            <span class="text-indigo-600 font-semibold" id="header-title">Compliance Evaluation</span>
+<main class="flex-1 min-w-0 flex flex-col relative z-10 bg-slate-50/50">
+    <header class="h-16 border-b border-slate-200 bg-white/80 backdrop-blur-md flex items-center justify-between px-4 md:px-8 flex-shrink-0 z-20 shadow-sm">
+        <div class="flex items-center text-sm font-medium text-slate-500 truncate mr-4">
+            Workspace <i data-lucide="chevron-right" class="w-3.5 h-3.5 mx-1 md:mx-2 opacity-40 shrink-0"></i>
+            <span class="text-indigo-600 font-semibold truncate" id="header-title">Compliance Evaluation</span>
         </div>
-        <div class="flex items-center gap-4 text-sm font-mono-custom text-slate-500">
-            <span class="bg-slate-100 px-3 py-1 rounded-md border border-slate-200">Rows: <span id="stat-rows" class="font-semibold text-slate-900">0</span></span>
-            <span class="bg-rose-50 px-3 py-1 rounded-md border border-rose-100 text-rose-600">Errors: <span id="stat-errors" class="font-semibold">0</span></span>
+        <div class="flex items-center gap-2 md:gap-4 text-xs md:text-sm font-mono-custom text-slate-500 shrink-0">
+            <span class="bg-slate-100 px-2 md:px-3 py-1 rounded-md border border-slate-200 hidden sm:inline-block">Rows: <span id="stat-rows" class="font-semibold text-slate-900">0</span></span>
+            <span class="bg-rose-50 px-2 md:px-3 py-1 rounded-md border border-rose-100 text-rose-600">Errors: <span id="stat-errors" class="font-semibold">0</span></span>
         </div>
     </header>
 
-    <div class="flex-1 p-8 overflow-hidden flex flex-col relative">
+    <div class="flex-1 min-w-0 p-4 md:p-6 lg:p-8 overflow-hidden flex flex-col relative">
 
         <!-- ═══ INGESTION TAB ═══ -->
-        <div id="panel-ingestion" class="flex flex-col h-full space-y-4 hidden-panel">
-            <div class="flex items-end justify-between">
+        <div id="panel-ingestion" class="flex flex-col h-full space-y-4 hidden-panel min-h-0 min-w-0">
+            <div class="flex flex-col sm:flex-row items-start sm:items-end justify-between gap-4 shrink-0">
                 <div>
                     <h2 class="text-2xl font-bold text-slate-900 tracking-tight">Data Ingestion</h2>
-                    <p class="text-sm text-slate-500 mt-1">Paste Tally Detailed Ledger export data below.</p>
+                    <p class="text-sm text-slate-500 mt-1">Paste or edit Tally Detailed Ledger export data below.</p>
                 </div>
-                <button id="clear-ingestion-btn" onclick="clearIngestionData()" class="hidden-panel flex items-center gap-2 px-3 py-2 bg-white border border-rose-200 text-rose-600 hover:bg-rose-50 font-medium rounded-lg text-sm transition-colors shadow-sm">
-                    <i data-lucide="trash-2" class="w-4 h-4"></i> Clear Data
+                <div class="flex flex-wrap gap-2">
+                    <button id="clear-ingestion-btn" onclick="clearIngestionData()" class="hidden-panel flex items-center gap-2 px-3 py-2 bg-white border border-rose-200 text-rose-600 hover:bg-rose-50 font-medium rounded-lg text-sm transition-colors shadow-sm">
+                        <i data-lucide="trash-2" class="w-4 h-4"></i> Clear Data
+                    </button>
+                    <button id="process-ingestion-btn" onclick="processIngestionData()" class="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg text-sm transition-colors shadow-sm">
+                        <i data-lucide="play" class="w-4 h-4"></i> Process & Update
+                    </button>
+                </div>
+            </div>
+            
+            <div id="ingestion-success-msg" class="hidden-panel p-3 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center justify-between gap-2 text-emerald-700">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="check-circle-2" class="w-4 h-4"></i>
+                    <span class="text-sm font-medium" id="ingestion-success-text">Data successfully ingested and parsed in memory.</span>
+                </div>
+                <button onclick="switchTab('audit')" class="text-xs font-semibold bg-emerald-100 hover:bg-emerald-200 text-emerald-800 px-3 py-1 rounded-full flex items-center gap-1.5 transition-colors">
+                    View Audit Results <i data-lucide="arrow-right" class="w-3 h-3"></i>
                 </button>
             </div>
+
             <div class="relative flex-1 rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden flex flex-col transition-all focus-within:border-indigo-400 focus-within:ring-4 focus-within:ring-indigo-500/10">
-                <textarea id="ingestion-textarea" class="absolute inset-0 w-full h-full opacity-0 z-20 cursor-text resize-none" placeholder="Click here and press Ctrl+V to paste Tally Data..." oninput="handlePasteCurrent(event)"></textarea>
-                <div id="ingestion-empty-state" class="absolute inset-0 flex flex-col items-center justify-center text-slate-400 z-10 pointer-events-none bg-slate-50/50">
-                    <div class="w-16 h-16 bg-white rounded-2xl shadow-sm border border-slate-200 flex items-center justify-center mb-4">
-                        <i data-lucide="clipboard-paste" class="w-8 h-8 text-indigo-500"></i>
-                    </div>
-                    <p class="font-semibold text-lg text-slate-700">Click & Paste (Ctrl+V)</p>
-                    <p class="text-sm mt-2">Expects Tally Detailed Ledger format</p>
-                </div>
-                <div id="ingestion-preview" class="z-10 w-full h-full relative hidden-panel flex flex-col">
-                    <div class="p-3 bg-emerald-50 border-b border-emerald-100 flex items-center justify-between gap-2 text-emerald-700">
-                        <div class="flex items-center gap-2">
-                            <i data-lucide="check-circle-2" class="w-4 h-4"></i>
-                            <span class="text-sm font-medium" id="ingestion-success-msg">Data successfully ingested and parsed in memory.</span>
-                        </div>
-                        <button onclick="switchTab('audit')" class="text-xs font-semibold bg-emerald-100 hover:bg-emerald-200 text-emerald-800 px-3 py-1 rounded-full flex items-center gap-1.5 transition-colors">
-                            View Audit Results <i data-lucide="arrow-right" class="w-3 h-3"></i>
-                        </button>
-                    </div>
-                    <textarea id="ingestion-preview-text" class="flex-1 w-full p-4 text-xs font-mono-custom text-slate-600 bg-white resize-none outline-none" readonly></textarea>
-                </div>
+                <textarea id="ingestion-textarea" class="flex-1 w-full h-full p-4 text-xs font-mono-custom text-slate-600 bg-white resize-none outline-none" placeholder="Paste Tally Data here... You can freely edit or append to this text later." oninput="markIngestionUnsaved()"></textarea>
             </div>
         </div>
 
         <!-- ═══ AUDIT TAB ═══ -->
-        <div id="panel-audit" class="flex flex-col h-full space-y-4 hidden-panel">
-            <div class="flex justify-between items-end">
-                <div>
-                    <h2 class="text-2xl font-bold text-slate-900 tracking-tight">Audit Results</h2>
-                    <p class="text-sm text-slate-500 mt-1">Compliance evaluation (<span id="audit-count">0</span> records, <span id="audit-deleted-count" class="text-rose-500">0</span> deleted)</p>
+        <div id="panel-audit" class="flex flex-col h-full space-y-4 hidden-panel min-h-0 min-w-0">
+            <div class="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-4 shrink-0">
+                <div class="min-w-0 w-full lg:w-auto">
+                    <h2 class="text-2xl font-bold text-slate-900 tracking-tight truncate">Audit Results</h2>
+                    <p class="text-sm text-slate-500 mt-1 truncate">Compliance evaluation (<span id="audit-count">0</span> records, <span id="audit-deleted-count" class="text-rose-500">0</span> deleted)</p>
                 </div>
-                <div class="flex gap-3 items-center">
-                    <div class="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm">
-                        <label class="text-xs font-medium text-slate-500">Tolerance (₹)</label>
+                <div class="flex flex-wrap gap-3 items-center w-full lg:w-auto">
+                    <div class="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm flex-1 lg:flex-none justify-between">
+                        <label class="text-xs font-medium text-slate-500 whitespace-nowrap">Tolerance (₹)</label>
                         <input type="number" id="variance-tolerance" value="1.00" step="0.5" onchange="computeAuditResults()" class="w-16 text-right text-sm font-mono-custom text-slate-900 focus:outline-none border-b border-slate-300 focus:border-indigo-500" />
                     </div>
-                    <button onclick="openExportModal()" id="export-btn" class="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-95">
-                        <i data-lucide="download" class="w-4 h-4"></i>
-                        <span id="export-text">Export Excel</span>
+                    <button onclick="exportToCSV()" class="flex flex-1 lg:flex-none items-center justify-center gap-2 px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-medium rounded-lg shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-95" title="Fallback export if Excel fails">
+                        <i data-lucide="file-text" class="w-4 h-4 shrink-0"></i>
+                        <span class="whitespace-nowrap">CSV</span>
+                    </button>
+                    <button onclick="openExportModal()" id="export-btn" class="flex flex-1 lg:flex-none items-center justify-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-95">
+                        <i data-lucide="download" class="w-4 h-4 shrink-0"></i>
+                        <span id="export-text" class="whitespace-nowrap">Export Excel</span>
                     </button>
                 </div>
             </div>
 
-            <div class="flex-1 bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col">
-                <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex gap-3 items-center flex-wrap">
-                    <div class="relative flex-1 min-w-[200px] max-w-sm">
+            <div class="flex-1 bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col min-h-0 min-w-0">
+                <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex gap-3 items-center flex-wrap shrink-0">
+                    <div class="relative flex-1 min-w-[150px] max-w-sm">
                         <i data-lucide="search" class="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4"></i>
                         <input type="text" id="audit-search" oninput="renderAuditResults()" placeholder="Search Party, Section, or Voucher..." class="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 shadow-sm transition-all" />
                     </div>
@@ -240,11 +246,11 @@
         </div>
 
         <!-- ═══ COMPARISON TAB ═══ -->
-        <div id="panel-comparison" class="flex flex-col h-full space-y-4 hidden-panel">
-            <div class="flex items-end justify-between">
-                <div>
-                    <h2 class="text-2xl font-bold text-slate-900 tracking-tight">Month-on-Month Comparison</h2>
-                    <p class="text-sm text-slate-500 mt-1">Analyze variances between Current and Previous month datasets.</p>
+        <div id="panel-comparison" class="flex flex-col h-full space-y-4 hidden-panel min-h-0 min-w-0">
+            <div class="flex flex-col sm:flex-row items-start sm:items-end justify-between gap-4 shrink-0">
+                <div class="min-w-0">
+                    <h2 class="text-2xl font-bold text-slate-900 tracking-tight truncate">Month-on-Month Comparison</h2>
+                    <p class="text-sm text-slate-500 mt-1 truncate">Analyze variances between Current and Previous month datasets.</p>
                 </div>
                 <!-- Sub-tab switcher -->
                 <div class="flex gap-2 bg-slate-100 p-1 rounded-lg">
@@ -258,9 +264,9 @@
             </div>
 
             <!-- Comparison: Input sub-panel -->
-            <div id="comparison-input-panel" class="flex-1 flex flex-col space-y-4">
-                <div class="grid grid-cols-2 gap-5 flex-1">
-                    <!-- Previous Month -->
+        <div id="comparison-input-panel" class="flex-1 flex flex-col space-y-4 min-w-0">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 flex-1 min-h-0">
+                <!-- Previous Month -->
                     <div class="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-sm flex flex-col relative transition-all focus-within:border-indigo-400 focus-within:ring-4 focus-within:ring-indigo-500/10">
                         <div class="px-4 py-2.5 bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-600 uppercase tracking-wider flex justify-between items-center">
                             <div class="flex items-center gap-2"><i data-lucide="history" class="w-3.5 h-3.5 text-slate-400"></i> Previous Month Data</div>
@@ -295,11 +301,11 @@
             </div>
 
             <!-- Comparison: Results sub-panel -->
-            <div id="comparison-results-panel" class="hidden-panel flex-1 bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col">
-                <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap gap-3 items-center justify-between">
-                    <div class="flex items-center gap-3 flex-1">
-                        <div class="relative flex-1 max-w-sm">
-                            <i data-lucide="search" class="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4"></i>
+        <div id="comparison-results-panel" class="hidden-panel flex-1 bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col min-w-0">
+            <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap gap-3 items-center justify-between shrink-0">
+                <div class="flex items-center gap-3 flex-1 min-w-[200px]">
+                    <div class="relative flex-1 max-w-sm">
+                        <i data-lucide="search" class="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4"></i>
                             <input type="text" id="comparison-search" oninput="renderComparison()" placeholder="Search Party, Section..." class="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 shadow-sm transition-all" />
                         </div>
                         <select id="comparison-status-filter" onchange="renderComparison()" class="px-3.5 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:border-indigo-500 cursor-pointer shadow-sm font-medium">
@@ -332,14 +338,14 @@
         </div>
 
         <!-- ═══ CONFIG TAB ═══ -->
-        <div id="panel-config" class="flex flex-col h-full space-y-6 max-w-5xl mx-auto w-full hidden-panel">
-            <div class="flex justify-between items-end">
-                <div>
-                    <h2 class="text-2xl font-bold text-slate-900 tracking-tight">Exclusion Configuration</h2>
-                    <p class="text-sm text-slate-500 mt-1">Define ledger keywords to exclude from Assessable Base before TDS calculation.</p>
-                </div>
+    <div id="panel-config" class="flex flex-col h-full space-y-6 max-w-5xl mx-auto w-full hidden-panel min-w-0">
+        <div class="flex justify-between items-end shrink-0">
+            <div class="min-w-0">
+                <h2 class="text-2xl font-bold text-slate-900 tracking-tight truncate">Exclusion Configuration</h2>
+                <p class="text-sm text-slate-500 mt-1 truncate">Define ledger keywords to exclude from Assessable Base before TDS calculation.</p>
             </div>
-            <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex items-end gap-4">
+        </div>
+        <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex flex-wrap sm:flex-nowrap items-end gap-4 shrink-0">
                 <div class="flex-1">
                     <label class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">New Section Name</label>
                     <input type="text" id="new-sec-name" placeholder="e.g. TDS 194J Professional 10%" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"/>
@@ -428,20 +434,31 @@ const parseTallyLedgerData = (rawText) => {
         if (upperLine.includes('OPENING BALANCE') || upperLine.includes('CLOSING BALANCE')) continue;
         if (/^[\d.,\t\s]+$/.test(line)) continue;
 
-        if (line.startsWith('Ledger:')) {
-            const cols = line.split('\t').map(c => c.trim()).filter(c => c);
-            if (cols.length >= 2 && cols[1] !== 'undefined' && cols[1] !== 'null') {
-                currentSection = cols[1];
-                const rateMatch = currentSection.match(/(\d+(?:\.\d+)?)%/);
-                const rate = rateMatch ? parseFloat(rateMatch[1]) : 0;
-                ensureDynamicConfig(currentSection, rate);
-            }
-            continue;
-        }
-        if (!currentSection) continue;
-
         const cols = line.split('\t').map(c => c.trim()).filter(c => c);
         if (cols.length === 0) continue;
+
+        // Check if this is a Ledger Header line (Sometimes Tally omits "Ledger:")
+        let isHeader = false;
+        let possibleSection = null;
+
+        if (line.startsWith('Ledger:')) {
+            isHeader = true;
+            possibleSection = cols.length >= 2 ? cols[1] : (cols.length === 1 ? cols[0].replace('Ledger:', '').trim() : null);
+        } else if (cols.length >= 2 && cols[1].includes(' to ') && /\d{1,2}-[A-Za-z]{3}-\d{2,4}/.test(cols[1])) {
+            // Catches format like: "TDS 194A    1-May-26 to 31-May-26"
+            isHeader = true;
+            possibleSection = cols[0];
+        }
+
+        if (isHeader && possibleSection && possibleSection !== 'undefined' && possibleSection !== 'null') {
+            currentSection = possibleSection;
+            const rateMatch = currentSection.match(/(\d+(?:\.\d+)?)%/);
+            const rate = rateMatch ? parseFloat(rateMatch[1]) : 0;
+            ensureDynamicConfig(currentSection, rate);
+            continue;
+        }
+
+        if (!currentSection) continue;
 
         if (/^\d{2}-[A-Za-z]{3}-\d{2,4}$/.test(cols[0]) || /^\d{4}-\d{2}-\d{2}$/.test(cols[0])) {
             const date = cols[0];
@@ -865,16 +882,21 @@ window.clearIngestionData = () => {
     state.currentMonthData = [];
     state.auditResultsCache = [];
     document.getElementById('ingestion-textarea').value = '';
-    document.getElementById('ingestion-textarea').classList.remove('hidden-panel');
-    document.getElementById('ingestion-empty-state').classList.remove('hidden-panel');
-    document.getElementById('ingestion-preview').classList.add('hidden-panel');
+    document.getElementById('ingestion-success-msg').classList.add('hidden-panel');
     document.getElementById('clear-ingestion-btn').classList.add('hidden-panel');
+    
+    const btn = document.getElementById('process-ingestion-btn');
+    btn.classList.add('bg-indigo-600', 'hover:bg-indigo-700');
+    btn.classList.remove('bg-amber-500', 'hover:bg-amber-600');
+    btn.innerHTML = `<i data-lucide="play" class="w-4 h-4"></i> Process & Update`;
+
     document.getElementById('comparison-curr-textarea').value = '';
     document.getElementById('comparison-curr-textarea').classList.add('hidden-panel');
     document.getElementById('comparison-curr-empty').classList.remove('hidden-panel');
     computeAuditResults();
     computeComparisonResults();
     updateStats();
+    lucide.createIcons();
 };
 
 window.clearPreviousData = () => {
@@ -891,21 +913,59 @@ window.clearPreviousData = () => {
 // ═══════════════════════════════════════════════
 // EVENT HANDLERS
 // ═══════════════════════════════════════════════
-window.handlePasteCurrent = (e) => {
-    const text = e.target.value;
+window.markIngestionUnsaved = () => {
+    document.getElementById('ingestion-success-msg').classList.add('hidden-panel');
+    const btn = document.getElementById('process-ingestion-btn');
+    btn.classList.remove('bg-indigo-600', 'hover:bg-indigo-700');
+    btn.classList.add('bg-amber-500', 'hover:bg-amber-600');
+    btn.innerHTML = `<i data-lucide="refresh-cw" class="w-4 h-4"></i> Update Changes`;
+    lucide.createIcons();
+};
+
+window.processIngestionData = () => {
+    const text = document.getElementById('ingestion-textarea').value;
     if (!text.trim()) return;
     state.currentMonthRaw = text;
     setProcessing(true);
     setTimeout(() => {
-        state.currentMonthData = parseTallyLedgerData(text);
+        const newRows = parseTallyLedgerData(text);
+        const oldRowsMap = new Map();
+        
+        // Create match key to retain manual adjustments (Date + VchNo + PartyName + Section + ActualTds)
+        const generateMatchKey = (r) => `${r.date}_${r.vchNo}_${r.partyName}_${r.section}_${r.actualTds}`.toLowerCase();
+        
+        state.currentMonthData.forEach(r => {
+            const key = generateMatchKey(r);
+            if (!oldRowsMap.has(key)) oldRowsMap.set(key, []);
+            oldRowsMap.get(key).push(r);
+        });
+
+        newRows.forEach(newRow => {
+            const key = generateMatchKey(newRow);
+            if (oldRowsMap.has(key) && oldRowsMap.get(key).length > 0) {
+                const oldRow = oldRowsMap.get(key).shift();
+                newRow.id = oldRow.id; // Retain ID so manual overrides tie back correctly
+                newRow.manualSectionOverride = oldRow.manualSectionOverride;
+                newRow.manualBaseOverride = oldRow.manualBaseOverride;
+                newRow.deleted = oldRow.deleted;
+                newRow.deletionRemark = oldRow.deletionRemark;
+            }
+        });
+
+        state.currentMonthData = newRows;
+        
         computeAuditResults();
         computeComparisonResults();
-        document.getElementById('ingestion-textarea').classList.add('hidden-panel');
-        document.getElementById('ingestion-empty-state').classList.add('hidden-panel');
-        document.getElementById('ingestion-preview').classList.remove('hidden-panel');
-        document.getElementById('ingestion-success-msg').textContent = `Successfully mapped ${state.currentMonthData.length} valid TDS transactions. Ready for audit.`;
-        document.getElementById('ingestion-preview-text').value = `Parsed ${state.currentMonthData.length} transactions.\nReady for audit.`;
+        
+        document.getElementById('ingestion-success-msg').classList.remove('hidden-panel');
+        document.getElementById('ingestion-success-text').textContent = `Successfully processed ${state.currentMonthData.length} TDS transactions. Previous edits retained.`;
         document.getElementById('clear-ingestion-btn').classList.remove('hidden-panel');
+        
+        const btn = document.getElementById('process-ingestion-btn');
+        btn.classList.add('bg-indigo-600', 'hover:bg-indigo-700');
+        btn.classList.remove('bg-amber-500', 'hover:bg-amber-600');
+        btn.innerHTML = `<i data-lucide="check" class="w-4 h-4"></i> Processed`;
+        
         // Mirror to comparison
         const currTA = document.getElementById('comparison-curr-textarea');
         const currEmpty = document.getElementById('comparison-curr-empty');
@@ -913,6 +973,8 @@ window.handlePasteCurrent = (e) => {
         currTA.classList.remove('hidden-panel');
         currEmpty.classList.add('hidden-panel');
         document.getElementById('curr-month-count').innerText = `${state.currentMonthData.length} rows`;
+        
+        lucide.createIcons();
         setProcessing(false);
     }, 100);
 };
@@ -986,24 +1048,81 @@ window.switchComparisonSubTab = (subTab) => {
 // ═══════════════════════════════════════════════
 // EXPORT
 // ═══════════════════════════════════════════════
+window.exportToCSV = () => {
+    if (state.auditResultsCache.length === 0) return;
+    try {
+        let csv = "Party Name,Vch No,Section,Net Base,Expected Rate,Expected TDS,Actual TDS,Difference,Status,Deletion Remark\n";
+        state.auditResultsCache.forEach(r => {
+            const sanitizeCsv = (str) => `"${String(str || '').replace(/"/g, '""')}"`;
+            csv += [
+                sanitizeCsv(r.partyName),
+                sanitizeCsv(r.vchNo),
+                sanitizeCsv(r.effectiveSection),
+                r.assessableValue,
+                r.expectedRate,
+                r.expectedTds,
+                r.actualTds,
+                r.diff,
+                sanitizeCsv(r.status),
+                sanitizeCsv(r.deletionRemark)
+            ].join(',') + "\n";
+        });
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `TDS_Audit_${new Date().getTime()}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+    } catch (e) {
+        alert("CSV Export failed: " + e.message);
+    }
+};
+
 window.openExportModal = () => {
     if (state.auditResultsCache.filter(r => !r.deleted).length === 0) return;
     document.getElementById('export-modal').classList.remove('hidden-panel');
-    lucide.createIcons();
 };
-window.closeExportModal = () => { document.getElementById('export-modal').classList.add('hidden-panel'); };
-document.getElementById('export-modal').addEventListener('click', e => { if (e.target === document.getElementById('export-modal')) closeExportModal(); });
+
+window.closeExportModal = () => { 
+    document.getElementById('export-modal').classList.add('hidden-panel'); 
+    const errorDiv = document.getElementById('export-error-msg');
+    if (errorDiv) errorDiv.classList.add('hidden-panel');
+};
+
+document.getElementById('export-modal').addEventListener('click', e => { 
+    if (e.target === document.getElementById('export-modal')) closeExportModal(); 
+});
 
 window.doExport = async () => {
-    closeExportModal();
-    if (!window.ExcelJS) { alert("ExcelJS library failed to load."); return; }
+    const errorDiv = document.getElementById('export-error-msg');
+    const modalExportBtn = document.getElementById('modal-export-btn');
+    const modalExportText = document.getElementById('modal-export-text');
+    const modalCancelBtn = document.getElementById('modal-cancel-btn');
+    
+    if (errorDiv) errorDiv.classList.add('hidden-panel');
+
+    if (!window.ExcelJS) { 
+        alert("Error: ExcelJS library failed to load. Please use the CSV button instead.");
+        return; 
+    }
+    
     const includeDeleted = document.getElementById('export-include-deleted').checked;
-    const btnText = document.getElementById('export-text');
-    const originalText = btnText.innerText;
-    btnText.innerText = "Exporting...";
+    
+    if (modalExportBtn) modalExportBtn.disabled = true;
+    if (modalCancelBtn) modalCancelBtn.disabled = true;
+    if (modalExportText) modalExportText.innerText = "Processing...";
     setProcessing(true);
 
     try {
+        // Aggressive sanitization to prevent Excel parsing crashes
+        const sanitize = (val) => {
+            let s = String(val || '').replace(/[\x00-\x1F\x7F-\x9F]/g, '').trim();
+            // Prevent formula injection which corrupts Excel files (+, -, =)
+            if (/^[=+\-@]/.test(s)) s = "'" + s;
+            return s;
+        };
+
         const workbook = new ExcelJS.Workbook();
         workbook.creator = 'TDS Auditor System';
 
@@ -1016,20 +1135,26 @@ window.doExport = async () => {
             { header: 'TDS CAL (Formula)', key: 'cal', width: 20 },
             { header: 'DIFF', key: 'diff', width: 20 },
         ];
+        
         const summaryData = {};
         state.auditResultsCache.filter(r => !r.deleted).forEach(r => {
-            const sec = r.effectiveSection;
-            if (!summaryData[sec]) summaryData[sec] = { amt: 0, act: 0, rate: state.tdsConfig[sec]?.rate || 0 };
-            summaryData[sec].amt += r.assessableValue;
-            summaryData[sec].act += r.actualTds;
+            const sec = sanitize(r.effectiveSection || 'Unknown');
+            const rateVal = Number(state.tdsConfig[sec]?.rate) || 0;
+            
+            if (!summaryData[sec]) summaryData[sec] = { amt: 0, act: 0, rate: rateVal };
+            summaryData[sec].amt += Number(r.assessableValue) || 0;
+            summaryData[sec].act += Number(r.actualTds) || 0;
         });
+        
         let rowIndex = 2;
         Object.entries(summaryData).forEach(([sec, data]) => {
-            const row = summarySheet.addRow({ sec, amt: data.amt, act: data.act });
-            row.getCell('cal').value = { formula: `B${rowIndex}*${data.rate}/100` };
+            const safeRate = Number(data.rate) || 0;
+            const row = summarySheet.addRow({ sec: sec, amt: data.amt, act: data.act });
+            row.getCell('cal').value = { formula: `B${rowIndex}*${safeRate}/100` };
             row.getCell('diff').value = { formula: `C${rowIndex}-D${rowIndex}` };
             rowIndex++;
         });
+        
         if (rowIndex > 2) {
             const totalRow = summarySheet.addRow({ sec: 'TOTAL', amt: { formula: `SUM(B2:B${rowIndex-1})` }, act: { formula: `SUM(C2:C${rowIndex-1})` } });
             totalRow.getCell('cal').value = { formula: `SUM(D2:D${rowIndex-1})` };
@@ -1072,7 +1197,7 @@ window.doExport = async () => {
         const groupedData = {};
         const rowsToExport = includeDeleted ? state.auditResultsCache : state.auditResultsCache.filter(r => !r.deleted);
         rowsToExport.forEach(r => {
-            const sec = r.effectiveSection;
+            const sec = sanitize(r.effectiveSection || 'Unknown');
             if (!groupedData[sec]) groupedData[sec] = [];
             groupedData[sec].push(r);
         });
@@ -1080,30 +1205,46 @@ window.doExport = async () => {
         let rIndex = 2;
         Object.entries(groupedData).forEach(([sec, rows]) => {
             let sno = 1;
-            const cleanSecMatch = sec.match(/19[0-9A-Z]+/);
-            const cleanSec = cleanSecMatch ? cleanSecMatch[0] : sec;
+            const cleanSecMatch = typeof sec === 'string' ? sec.match(/19[0-9A-Z]+/) : null;
+            const cleanSec = cleanSecMatch ? cleanSecMatch[0] : String(sec);
+            
             rows.forEach(r => {
                 let remark = r.deletionRemark ? '' : '';
                 if (!r.deleted) {
                     if (r.manualSectionOverride || r.manualBaseOverride !== null) remark = 'Corrected manually';
                     else if (r.status === 'Missed' || r.status === 'Mismatch' || r.status === 'Missing Base') remark = `Review required - ${r.status}`;
                 }
+                
                 const row = auditSheet.addRow({
-                    sno: sno++, month: '', sec: cleanSec, nature: '',
-                    amt: r.assessableValue, rate: r.expectedRate, act: r.actualTds,
-                    date: r.date, party: r.partyName,
-                    remarks: remark, status: r.status, vchNo: r.vchNo,
-                    delRemark: r.deletionRemark || ''
+                    sno: sno++, 
+                    month: '', 
+                    sec: sanitize(cleanSec), 
+                    nature: '',
+                    amt: Number(r.assessableValue) || 0, 
+                    rate: Number(r.expectedRate) || 0, 
+                    act: Number(r.actualTds) || 0,
+                    date: sanitize(r.date), 
+                    party: sanitize(r.partyName || 'Unknown'),
+                    remarks: sanitize(remark), 
+                    status: sanitize(r.status || 'Unknown'), 
+                    vchNo: sanitize(r.vchNo),
+                    delRemark: sanitize(r.deletionRemark)
                 });
+                
                 row.getCell('cal').value = { formula: `E${rIndex}*F${rIndex}/100` };
                 row.getCell('diff').value = { formula: `G${rIndex}-H${rIndex}` };
+                
                 const statusCell = row.getCell('status');
                 if (r.deleted) {
                     row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF2F2' } };
                     row.font = { color: { argb: 'FFB91C1C' }, italic: true };
-                } else if (r.status === 'Missed' || r.status === 'Missing Base') statusCell.font = { color: { argb: 'FFE11D48' } };
-                else if (r.status === 'Mismatch') statusCell.font = { color: { argb: 'FFD97706' } };
-                else if (r.status === 'Correct' || r.status === 'Corrected') statusCell.font = { color: { argb: 'FF059669' } };
+                } else if (r.status === 'Missed' || r.status === 'Missing Base') {
+                    statusCell.font = { color: { argb: 'FFE11D48' } };
+                } else if (r.status === 'Mismatch') {
+                    statusCell.font = { color: { argb: 'FFD97706' } };
+                } else if (r.status === 'Correct' || r.status === 'Corrected') {
+                    statusCell.font = { color: { argb: 'FF059669' } };
+                }
                 rIndex++;
             });
             const sepRow = auditSheet.addRow({});
@@ -1111,6 +1252,7 @@ window.doExport = async () => {
             rIndex++;
         });
 
+        // Write buffer immediately inside async flow to prevent browser tracking loss
         const buffer = await workbook.xlsx.writeBuffer();
         const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
         const url = window.URL.createObjectURL(blob);
@@ -1119,12 +1261,16 @@ window.doExport = async () => {
         a.download = `TDS_Audit_Report_${new Date().getTime()}.xlsx`;
         a.click();
         window.URL.revokeObjectURL(url);
+        
+        closeExportModal();
     } catch (error) {
         console.error("Export failed:", error);
-        alert("Failed to export Excel.");
+        alert("Data Error preventing export:\n" + (error.message || error) + "\n\nPlease try the CSV export button instead.");
     } finally {
         setProcessing(false);
-        btnText.innerText = originalText;
+        if (modalExportBtn) modalExportBtn.disabled = false;
+        if (modalCancelBtn) modalCancelBtn.disabled = false;
+        if (modalExportText) modalExportText.innerText = "Export";
     }
 };
 
