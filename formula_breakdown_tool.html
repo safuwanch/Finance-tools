@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calculation Table & Formula Breakdown</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Jspreadsheet & jSuites -->
+    <script src="https://bossanova.uk/jspreadsheet/v4/jexcel.js"></script>
+    <link rel="stylesheet" href="https://bossanova.uk/jspreadsheet/v4/jexcel.css" type="text/css" />
+    <script src="https://jsuites.net/v4/jsuites.js"></script>
+    <link rel="stylesheet" href="https://jsuites.net/v4/jsuites.css" type="text/css" />
+    
+    <!-- SheetJS for Excel Export -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
+
+    <!-- Font Awesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
+        .jexcel > thead > tr > td { background-color: #f9fafb; font-weight: 600; }
+        .jexcel > tbody > tr > td { padding: 4px 8px; }
+        
+        /* Toast Notification Styles */
+        #toast-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 5000;
+        }
+        .toast {
+            background-color: #10B981;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-top: 10px;
+            opacity: 0;
+            transform: translateY(100%);
+            transition: all 0.3s ease;
+        }
+        .toast.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* Output Table Styles */
+        #outputTable {
+            border-collapse: collapse;
+            width: 100%;
+            background: white;
+            font-size: 0.9rem;
+        }
+        #outputTable th, #outputTable td {
+            border: 1px solid #d1d5db;
+            padding: 8px 12px;
+            text-align: left;
+        }
+        #outputTable th {
+            background-color: #f9fafb;
+            font-weight: 600;
+        }
+        #outputTable td.amount-col {
+            text-align: right;
+            font-family: monospace;
+            font-size: 0.95rem;
+        }
+        .font-bold { font-weight: 700; }
+    </style>
+</head>
+<body class="text-gray-800">
+
+    <div class="max-w-7xl mx-auto px-4 py-8 space-y-8">
+        
+        <!-- Header -->
+        <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-200 flex justify-between items-center">
+            <div>
+                <h1 class="text-2xl font-bold text-gray-900"><i class="fa-solid fa-calculator text-blue-600 mr-2"></i>Formula Breakdown Engine</h1>
+                <p class="text-sm text-gray-500 mt-1">Paste your data, define your formulas, and generate hierarchical breakdowns.</p>
+            </div>
+        </div>
+
+        <!-- Spreadsheet Section -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div class="px-6 py-4 border-b border-gray-200 bg-gray-50">
+                <h2 class="text-lg font-semibold text-gray-800"><i class="fa-solid fa-table text-green-600 mr-2"></i>1. Data Input</h2>
+                <p class="text-xs text-gray-500">Row 1: Amounts (Values). Row 2: Particulars (Names). Use standard Excel column letters (A, B, C...).</p>
+            </div>
+            <div class="p-6 overflow-x-auto">
+                <div id="spreadsheet"></div>
+            </div>
+        </div>
+
+        <!-- Formula Definition Section -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+            <div class="px-6 py-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
+                <div>
+                    <h2 class="text-lg font-semibold text-gray-800"><i class="fa-solid fa-square-root-variable text-purple-600 mr-2"></i>2. Define Formulas</h2>
+                    <p class="text-xs text-gray-500">Define your main calculation and any sub-calculations. E.g., SUM(A,B) or A+B-C</p>
+                </div>
+                <button onclick="addFormulaRow()" class="px-4 py-2 bg-purple-50 text-purple-600 border border-purple-200 hover:bg-purple-100 rounded-lg text-sm font-medium transition-colors">
+                    <i class="fa-solid fa-plus mr-1"></i> Add Formula
+                </button>
+            </div>
+            <div class="p-6 space-y-4" id="formula-container">
+                <!-- Formulas will be injected here -->
+            </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="flex justify-center space-x-4">
+            <button onclick="generateBreakdown()" class="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-md font-semibold transition-all transform hover:-translate-y-0.5">
+                <i class="fa-solid fa-gears mr-2"></i> Generate Breakdown
+            </button>
+        </div>
+
+        <!-- Output Section -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200" id="output-section" style="display: none;">
+            <div class="px-6 py-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
+                <h2 class="text-lg font-semibold text-gray-800"><i class="fa-solid fa-list-check text-orange-600 mr-2"></i>3. Generated Breakdown</h2>
+                <div class="space-x-2">
+                    <button onclick="copyToClipboard()" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300 rounded-lg text-sm font-medium transition-colors">
+                        <i class="fa-regular fa-copy mr-1"></i> Copy to Clipboard
+                    </button>
+                    <button onclick="exportToExcel()" class="px-4 py-2 bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 rounded-lg text-sm font-medium transition-colors">
+                        <i class="fa-solid fa-file-excel mr-1"></i> Export Excel
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Audit Check Panel -->
+            <div id="audit-panel" class="mx-6 mt-4 p-4 rounded-lg flex flex-wrap gap-4 text-sm font-medium shadow-sm border" style="display: none;">
+                <!-- Audit stats injected here -->
+            </div>
+
+            <div class="p-6 overflow-x-auto">
+                <table id="outputTable">
+                    <thead>
+                        <tr>
+                            <th>Action</th>
+                            <th>Column</th>
+                            <th>Main</th>
+                            <th>Sub</th>
+                            <th>Sub amt</th>
+                            <th>Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody id="outputBody">
+                        <!-- Rows will be populated by JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Toast Notifications Container -->
+    <div id="toast-container"></div>
+
+    <script>
+        
+        let sheet = null;
+        let formulaCount = 0;
+
+        // Custom notification system (replacing alert)
+        function showToast(message, isError = false) {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast ${isError ? 'bg-red-500' : 'bg-green-500'}`;
+            toast.innerHTML = `<i class="fa-solid ${isError ? 'fa-circle-exclamation' : 'fa-circle-check'} mr-2"></i> ${message}`;
+            container.appendChild(toast);
+            
+            // Trigger animation
+            setTimeout(() => toast.classList.add('show'), 10);
+            
+            // Remove after 3 seconds
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        // Generate Column Letters A, B ... Z, AA, AB...
+        function getColumnLetter(colIndex) {
+            let letter = '';
+            while (colIndex >= 0) {
+                letter = String.fromCharCode((colIndex % 26) + 65) + letter;
+                colIndex = Math.floor(colIndex / 26) - 1;
+            }
+            return letter;
+        }
+
+        // Format Numbers in Indian Style with 2 decimals
+        function formatNumber(num) {
+            if (num === null || num === undefined || isNaN(num) || num === '') return '';
+            return new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num);
+        }
+
+        // Parse formatted numbers back to float
+        function parseNumber(str) {
+            if (str === null || str === undefined || str === '') return null;
+            if (typeof str === 'number') return str;
+            // Remove commas and other non-numeric chars except minus and dot
+            const cleaned = str.toString().replace(/,/g, '');
+            const num = parseFloat(cleaned);
+            return isNaN(num) ? null : num;
+        }
+
+        
+        // Initial Mock Data (Your exact data)
+        const initialData = [
+            ['', '', '0.00', '', '', '', '', '', '', '#N/A', '', '3039.00', '3649.00', '513933.00', '102580.00', '3010532.00', '358.00', '4271.00', '1150997.00', '18980.00', '57550.00', '0.00', '0.00', '-135142.00', '-30031.00', '-107623.00', '2642.00', '33322.00', '9560611.00', '-8509657.00', '329731.00', '-819698.00', '0.00', '-560987.00', '458.00', '3797.00', '1093738.00', '17551.00', '-19150.00', '-192288.00', '49896.00', '0.00', '45000.00', '49306.00', '2274685.00', '192377.00', '2467062.00', '61518819.00', '2600027.00', '-132965.00', '413870.00', '', 'Not Found', '598248.00', '879436.00', '831888.00', '114166.00', '113.00', '', '133574.00', '789150.00', '446025.00', '3337857.00', '915.00', '0.00', '0.00', '0.00', '', '', '', ''],
+            ['Con', 'Agreement Mode', 'Link PAN with Aadhaar', 'Link PAN with Aadhaar', 'Date of allocation', 'Sr. No.', 'Vehicle Number', 'Vendor Name', 'Vendor Code', 'Vendor Type', 'Business Model', 'Active Vehicle Days', 'Onroad Days', 'Daily Rent Applied', 'Weekly Indemnity Fees', 'Net Weekly Lease Rental', 'Performance Day', 'OLA Trips', 'OLA Net Revenue', 'Toll', 'OLA Net Revenue (GST)', 'Weekly Adjustment', 'EV Exemption', 'OLA Incentve', 'Online Payment (OLA)', 'OLA Week O/s', 'Performance Day', 'Uber Trips', 'Total Earning', 'Uber Cash Collection', 'Toll', 'Driver subscription charge', 'Uber Incentive', 'Uber Week O/s', 'Onroad Days', 'Rapido Trips', 'Rapido Net Revenue', 'Toll', 'Incentive', 'Vehicle Level Adjustment', 'TDS', 'Challan', 'Accident', 'DeadMile', 'Current O/S', 'Pending Dues', 'Total O/s', 'Deposit paid', 'To Collect', 'To Payout', 'Deposit pending', 'Deposit Pending & Total O/s', 'DM Name', 'In trip KM', 'GPS KM', 'Ideal GPS KM', 'Dead Mile', 'Dead Mile %', 'DTO Car Number', 'Incentive as per Ola report', 'Expected as per Uber', 'Received From Uber', 'Letzryd Earning', 'Letzryd Earning Per Day', 'Actual Per Day Earning', 'New Opeartor', 'Gform status', 'Same Day D&A- to do not give 1 day rent off', 'Driver Plan', 'Type Of Plan', 'Deposit slab']
+        ];
+
+        // Initialize Jspreadsheet on window load
+        window.onload = function() {
+            // Generate columns setup A to BS (71 columns)
+            const columns = [];
+            for(let i=0; i<75; i++) {
+                columns.push({ title: getColumnLetter(i), width: 100 });
+            }
+
+            sheet = jspreadsheet(document.getElementById('spreadsheet'), {
+                data: initialData,
+                columns: columns,
+                minDimensions: [75, 4], // 75 cols, 4 rows
+                defaultColWidth: 100,
+                tableOverflow: true,
+                tableWidth: "100%",
+                tableHeight: "300px"
+            });
+
+            // Pre-fill initial formulas
+            addFormulaRow('BK', 'BJ+BH+AS-AP-AO+SUM(AC,AD,AE,AF)-Y-U', true, 'Letzryd Earning');
+            addFormulaRow('AS', 'P+Z+AH+AN+AP+AQ+AR+AO+AM', false, 'Current O/S (Subtotal)');
+        };
+
+
+        function addFormulaRow(target = '', expr = '', isMain = false, customName = '') {
+            const id = formulaCount++;
+            const container = document.getElementById('formula-container');
+            
+            const div = document.createElement('div');
+            div.className = "flex items-center space-x-3 bg-white p-3 border border-gray-200 rounded-lg shadow-sm";
+            div.id = `formula-row-${id}`;
+            
+            div.innerHTML = `
+                <div class="flex flex-col items-center justify-center px-2">
+                    <input type="radio" name="mainFormula" id="main-${id}" value="${id}" ${isMain ? 'checked' : ''} class="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 focus:ring-blue-500 cursor-pointer">
+                    <label for="main-${id}" class="text-[10px] text-gray-500 mt-1 cursor-pointer">Main</label>
+                </div>
+                
+                <div class="flex-shrink-0 w-24">
+                    <label class="text-xs text-gray-500 block mb-1">Result Col</label>
+                    <input type="text" class="target-col w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm uppercase" placeholder="e.g. BK" value="${target}">
+                </div>
+                <div class="flex-shrink-0 w-48 hidden"> <!-- Hidden custom name, retrieved dynamically if needed -->
+                    <input type="text" class="custom-name w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" placeholder="Name" value="${customName}">
+                </div>
+                <div class="font-bold text-gray-400">=</div>
+                <div class="flex-grow">
+                    <label class="text-xs text-gray-500 block mb-1">Equation / Formula</label>
+                    <input type="text" class="expr-val w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm uppercase tracking-wide" placeholder="e.g. BJ+BH-AP+SUM(AC,AD)" value="${expr}">
+                </div>
+                <button onclick="removeFormulaRow(${id})" class="text-red-500 hover:text-red-700 p-2 mt-4 transition-colors" title="Remove Formula">
+                    <i class="fa-solid fa-trash-can"></i>
+                </button>
+            `;
+            container.appendChild(div);
+        }
+
+        function removeFormulaRow(id) {
+            document.getElementById(`formula-row-${id}`).remove();
+        }
+
+
+        function getSpreadsheetData() {
+            const data = sheet.getData();
+            const amountsRow = data[0];
+            const particularsRow = data[1];
+            
+            const colMap = {};
+            for(let i=0; i < particularsRow.length; i++) {
+                const letter = getColumnLetter(i);
+                colMap[letter] = {
+                    particular: particularsRow[i] || '',
+                    amount: parseNumber(amountsRow[i])
+                };
+            }
+            return colMap;
+        }
+
+        function getFormulas() {
+            const formulas = {};
+            let mainFormulaCol = null;
+            
+            const rows = document.querySelectorAll('#formula-container > div');
+            rows.forEach(row => {
+                const isMain = row.querySelector('input[type="radio"]').checked;
+                const targetCol = row.querySelector('.target-col').value.trim().toUpperCase();
+                const expr = row.querySelector('.expr-val').value.trim().toUpperCase();
+                const customName = row.querySelector('.custom-name').value.trim();
+                
+                if(targetCol && expr) {
+                    formulas[targetCol] = { expr, customName };
+                    if(isMain) mainFormulaCol = targetCol;
+                }
+            });
+            
+            return { formulas, mainFormulaCol };
+        }
+
+        // Helper to expand SUM(A,B,C) -> +A+B+C
+        function expandFormula(expr) {
+            let expanded = expr.replace(/SUM\(([^)]+)\)/g, (match, content) => {
+                const cols = content.split(',').map(c => c.trim());
+                return cols.map(c => '+' + c).join('');
+            });
+            
+            // Remove spaces
+            expanded = expanded.replace(/\s+/g, '');
+            
+            // Add implicit + at the start if needed
+            if(expanded.length > 0 && expanded[0] !== '+' && expanded[0] !== '-') {
+                expanded = '+' + expanded;
+            }
+            return expanded;
+        }
+
+        // Extract tokens like +A, -B
+        function tokenize(expr) {
+            const regex = /([+-])([A-Z]+)/g;
+            let match;
+            const tokens = [];
+            while ((match = regex.exec(expr)) !== null) {
+                tokens.push({
+                    operator: match[1],
+                    column: match[2]
+                });
+            }
+            return tokens;
+        }
+
+        function generateBreakdown() {
+            try {
+                const dataMap = getSpreadsheetData();
+                const { formulas, mainFormulaCol } = getFormulas();
+
+                if (!mainFormulaCol) {
+                    showToast("Please select a Main formula.", true);
+                    return;
+                }
+                
+                const mainFormula = formulas[mainFormulaCol];
+                if (!mainFormula) {
+                    showToast("Main formula expression is missing.", true);
+                    return;
+                }
+
+                // 1. Build a Tree of all calculations to handle infinite nesting
+                function buildTree(col, visited = new Set()) {
+                    if (visited.has(col)) throw new Error("Circular reference detected at column " + col);
+                    visited.add(col);
+
+                    let sheetVal = dataMap[col] && dataMap[col].amount !== null ? dataMap[col].amount : null;
+
+                    let node = { 
+                        col: col, 
+                        particular: dataMap[col] ? dataMap[col].particular : col, 
+                        children: [], 
+                        isFormula: !!formulas[col],
+                        sheetValue: sheetVal
+                    };
+                    
+                    if (formulas[col]) {
+                        const expr = expandFormula(formulas[col].expr);
+                        const tokens = tokenize(expr);
+                        let total = 0;
+                        
+                        tokens.forEach(tok => {
+                            let childNode = buildTree(tok.column, new Set(visited));
+                            childNode.operator = tok.operator;
+                            childNode.actionStr = tok.operator === '+' ? 'Add (+)' : 'Subtract (-)';
+                            
+                            // Add or subtract from parent total
+                            total += (tok.operator === '+' ? childNode.value : -childNode.value);
+                            node.children.push(childNode);
+                        });
+                        
+                        node.value = total;
+                        if (formulas[col].customName) node.particular = formulas[col].customName;
+                    } else {
+                        // Base raw value
+                        node.value = node.sheetValue !== null ? node.sheetValue : 0;
+                    }
+                    
+                    return node;
+                }
+
+                // Initialize Root
+                let rootNode;
+                try {
+                    rootNode = buildTree(mainFormulaCol);
+                } catch(e) {
+                    showToast(e.message, true); 
+                    return;
+                }
+
+                // 2. Find the maximum depth to create dynamic table columns
+                let maxDepth = 0;
+                function findDepth(node, currentDepth) {
+                    if (currentDepth > maxDepth) maxDepth = currentDepth;
+                    node.children.forEach(c => findDepth(c, currentDepth + 1));
+                }
+                rootNode.children.forEach(c => findDepth(c, 0));
+
+                // Always have at least 1 sub-level for visual consistency
+                const maxSubLevels = Math.max(1, maxDepth); 
+
+                // 3. Dynamically Generate Table Headers
+                const thead = document.querySelector('#outputTable thead');
+                let headerHtml = `<tr><th>Action</th><th>Column</th><th>Main</th>`;
+                
+                if (maxSubLevels === 1) {
+                    headerHtml += `<th>Sub</th><th>Sub amt</th>`;
+                } else {
+                    for(let i = 1; i <= maxSubLevels; i++) {
+                        headerHtml += `<th>Sub ${i}</th><th>Sub ${i} amt</th>`;
+                    }
+                }
+                headerHtml += `<th>Amount</th></tr>`;
+                thead.innerHTML = headerHtml;
+
+                const totalCols = 3 + (maxSubLevels * 2) + 1;
+                const lastColIdx = totalCols - 1;
+
+                let renderedRowCount = 0;
+                let totalDiffAmount = 0;
+                let hasDifferences = false;
+
+                // 4. Recursively Render Rows
+                const tbody = document.getElementById('outputBody');
+                tbody.innerHTML = '';
+                
+                let grandTotal = 0;
+
+                function renderNode(node, depth, isRootChild) {
+                    let tr = document.createElement('tr');
+                    renderedRowCount++;
+                    
+                    // Column Indexing Math based on depth
+                    let nameIdx = depth === 0 ? 2 : (1 + depth * 2);
+                    let amtIdx = depth === 0 ? lastColIdx : (2 + depth * 2);
+
+                    let rowHtml = Array(totalCols).fill('<td></td>');
+                    
+                    // Action & Col
+                    rowHtml[0] = `<td>${node.actionStr || ''}</td>`;
+                    rowHtml[1] = `<td class="${node.isFormula ? 'font-bold' : ''}">${node.col}</td>`;
+
+                    // Particular (Name)
+                    let nameText = node.particular;
+                    if(node.isFormula) nameText = `<span class="font-bold">${nameText} (Subtotal)</span>`;
+                    rowHtml[nameIdx] = `<td>${nameText}</td>`;
+
+                    // Amount
+                    let amtClass = depth === 0 ? 'amount-col font-bold' : 'amount-col';
+                    rowHtml[amtIdx] = `<td class="${amtClass}">${formatNumber(node.value)}</td>`;
+
+                    tr.innerHTML = rowHtml.join('');
+                    tbody.appendChild(tr);
+
+                    if (isRootChild) {
+                        grandTotal += (node.operator === '+' ? node.value : -node.value);
+                    }
+
+                    // Render Sub-Children
+                    if (node.isFormula && node.children.length > 0) {
+                        node.children.forEach(c => renderNode(c, depth + 1, false));
+                        
+                        // Audit Check: Sum of subs vs Parent sheet figure
+                        if (node.sheetValue !== null) {
+                            // Calculate difference (Rounding to 2 decimals to prevent floating point noise)
+                            let diff = Math.round((node.value - node.sheetValue) * 100) / 100;
+                            
+                            if (Math.abs(diff) !== 0) {
+                                hasDifferences = true;
+                                totalDiffAmount += Math.abs(diff);
+
+                                let diffTr = document.createElement('tr');
+                                diffTr.className = 'bg-red-50'; // light red background
+                                
+                                let diffHtml = Array(totalCols).fill('<td></td>');
+                                let nameIdx = (depth + 1) === 0 ? 2 : (1 + (depth + 1) * 2);
+                                let amtIdx = (depth + 1) === 0 ? lastColIdx : (2 + (depth + 1) * 2);
+
+                                diffHtml[0] = `<td class="text-red-600 font-bold border-red-200 border"><i class="fa-solid fa-triangle-exclamation"></i> Audit Diff</td>`;
+                                diffHtml[1] = `<td class="text-red-600 font-bold border-red-200 border">${node.col}</td>`;
+                                diffHtml[nameIdx] = `<td class="text-red-600 text-xs font-semibold border-red-200 border">Calculated: ${formatNumber(node.value)} vs Sheet: ${formatNumber(node.sheetValue)}</td>`;
+                                diffHtml[amtIdx] = `<td class="amount-col font-bold text-red-600 border-red-200 border" title="Difference">${formatNumber(diff)}</td>`;
+
+                                diffTr.innerHTML = diffHtml.join('');
+                                tbody.appendChild(diffTr);
+                            }
+                        }
+                    }
+                }
+
+                // Start rendering from the top-level children
+                rootNode.children.forEach(c => renderNode(c, 0, true));
+
+                // 5. Final Grand Total Row
+                let trTotal = document.createElement('tr');
+                let trHtml = Array(totalCols).fill('<td></td>');
+                trHtml[2] = `<td class="font-bold text-lg">${rootNode.particular || 'Final Output'}</td>`;
+                trHtml[lastColIdx] = `<td class="amount-col font-bold text-lg text-blue-700">${formatNumber(grandTotal)}</td>`;
+                trTotal.innerHTML = trHtml.join('');
+                tbody.appendChild(trTotal);
+                
+                // --- Audit Panel Logic ---
+                function countNodes(node) {
+                    let count = 1; // Count self
+                    node.children.forEach(c => count += countNodes(c));
+                    return count;
+                }
+                const totalFormulaNodes = countNodes(rootNode) - 1; // Exclude abstract root node from token count
+
+                const auditPanel = document.getElementById('audit-panel');
+                auditPanel.style.display = 'flex';
+                
+                let isMatch = (totalFormulaNodes === renderedRowCount);
+                
+                auditPanel.className = `mx-6 mt-4 p-4 rounded-lg flex flex-wrap gap-6 text-sm font-medium shadow-sm border ${isMatch && !hasDifferences ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800'}`;
+                
+                auditPanel.innerHTML = `
+                    <div class="flex items-center"><i class="fa-solid ${isMatch && !hasDifferences ? 'fa-check-circle' : 'fa-circle-exclamation'} text-xl mr-2"></i> <strong>Audit Status: ${isMatch && !hasDifferences ? 'Passed' : 'Action Required'}</strong></div>
+                    <div class="flex items-center"><i class="fa-solid fa-list-ol mr-2"></i> Formula Items: ${totalFormulaNodes}</div>
+                    <div class="flex items-center"><i class="fa-solid fa-table-rows mr-2"></i> Report Rows: ${renderedRowCount}</div>
+                    ${hasDifferences ? `<div class="flex items-center font-bold"><i class="fa-solid fa-scale-unbalanced mr-2"></i> Value Mismatch Found!</div>` : ''}
+                `;
+                // -------------------------
+
+                document.getElementById('output-section').style.display = 'block';
+                document.getElementById('output-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+                
+                showToast("Dynamic Breakdowns generated successfully!");
+
+            } catch (error) {
+                console.error(error);
+                showToast("Error processing data. Check formulas and syntax.", true);
+            }
+        }
+
+        function copyToClipboard() {
+            const table = document.getElementById('outputTable');
+            const range = document.createRange();
+            range.selectNode(table);
+            
+            const selection = window.getSelection();
+            selection.removeAllRanges();
+            selection.addRange(range);
+            
+            try {
+                document.execCommand('copy');
+                showToast("Table copied! You can now paste directly into Excel.");
+            } catch (err) {
+                showToast("Failed to copy table.", true);
+            }
+            selection.removeAllRanges();
+        }
+
+        function exportToExcel() {
+            try {
+                const table = document.getElementById('outputTable');
+                const wb = XLSX.utils.table_to_book(table, { sheet: "Breakdown" });
+                const ws = wb.Sheets["Breakdown"];
+                
+                // Dynamically assign Excel column widths based on dynamic headers
+                const headerCells = table.querySelectorAll('thead th');
+                const wscols = [];
+                
+                headerCells.forEach((th, idx) => {
+                    const text = th.innerText.toLowerCase();
+                    if(idx === 0) wscols.push({wch: 12});      // Action
+                    else if(idx === 1) wscols.push({wch: 8});  // Column
+                    else if(text.includes('amt') || text.includes('amount')) wscols.push({wch: 15});
+                    else wscols.push({wch: 30});               // Name columns
+                });
+
+                ws['!cols'] = wscols;
+
+                XLSX.writeFile(wb, "Formula_Breakdown.xlsx");
+                showToast("Excel file downloaded!");
+            } catch (error) {
+                console.error(error);
+                showToast("Export failed.", true);
+            }
+        }
+    </script>
+</body>
+</html>
