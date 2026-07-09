@@ -1,0 +1,945 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tally Data Flattener</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/jspreadsheet-ce@4.13.3/dist/index.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jspreadsheet-ce@4.13.3/dist/jspreadsheet.min.css" type="text/css" />
+    <script src="https://cdn.jsdelivr.net/npm/jsuites@4.3.2/dist/jsuites.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jsuites@4.3.2/dist/jsuites.min.css" type="text/css" />
+
+    <style>
+        .jexcel_content { max-height: 400px; }
+        .jexcel > thead > tr > td { background-color: #f3f4f6; color: #374151; font-weight: 600; font-size: 0.875rem; }
+        /* Smooth transition for hiding/showing elements */
+        .fade-transition { transition: all 0.3s ease-in-out; }
+    </style>
+</head>
+<body class="min-h-screen bg-gray-50 p-6 font-sans text-gray-800">
+
+    <div class="max-w-[1400px] mx-auto space-y-6">
+        
+        <!-- Header -->
+        <div class="flex items-center space-x-3 pb-4 border-b border-gray-200">
+            <div class="bg-blue-600 p-2 rounded-lg">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+            </div>
+            <div>
+                <h1 class="text-2xl font-bold text-gray-900">Tally Data Flattener <span class="text-xs align-top bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full ml-1">v2.0</span></h1>
+                <p class="text-sm text-gray-500">Paste raw data, select your export format, and flatten split entries instantly.</p>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Left Panel: Input & Settings -->
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col space-y-4">
+                
+                <!-- Format Mode Selector -->
+                <div class="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">1. Select Tally Export Format:</label>
+                    <div class="flex space-x-4">
+                        <label class="flex items-center space-x-2 cursor-pointer">
+                            <input type="radio" name="formatMode" value="ledger" checked onchange="toggleModeUI()" class="w-4 h-4 text-blue-600 focus:ring-blue-500 border-gray-300">
+                            <span class="text-sm font-medium">Ledger Detailed (Standard)</span>
+                        </label>
+                        <label class="flex items-center space-x-2 cursor-pointer">
+                            <input type="radio" name="formatMode" value="group" onchange="toggleModeUI()" class="w-4 h-4 text-blue-600 focus:ring-blue-500 border-gray-300">
+                            <span class="text-sm font-medium">Group Vouchers Detailed</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Input Method Selector (NEW) -->
+                <div class="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">2. Select Input Method:</label>
+                    <div class="flex space-x-4">
+                        <label class="flex items-center space-x-2 cursor-pointer">
+                            <input type="radio" name="inputMethod" value="grid" checked onchange="toggleModeUI()" class="w-4 h-4 text-blue-600 focus:ring-blue-500 border-gray-300">
+                            <span class="text-sm font-medium">Spreadsheet Grid</span>
+                        </label>
+                        <label class="flex items-center space-x-2 cursor-pointer">
+                            <input type="radio" name="inputMethod" value="csv" onchange="toggleModeUI()" class="w-4 h-4 text-blue-600 focus:ring-blue-500 border-gray-300">
+                            <span class="text-sm font-medium">Text Area (Paste CSV)</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="flex justify-between items-center mt-2">
+                    <h2 class="font-semibold text-lg flex items-center">
+                        3. Paste Raw Data
+                    </h2>
+                    <button onclick="loadExample()" class="text-xs text-blue-600 hover:text-blue-800 underline">
+                        Load Example
+                    </button>
+                </div>
+                
+                <!-- JSpreadsheet Container (For Ledger Mode) -->
+                <div id="gridInputContainer" class="w-full border border-gray-300 rounded-lg overflow-hidden bg-white fade-transition">
+                    <div id="spreadsheet"></div>
+                </div>
+
+                <!-- Textarea Container (For Group Vouchers CSV) -->
+                <div id="csvInputContainer" class="w-full fade-transition" style="display: none;">
+                    <textarea id="csvTextArea" class="w-full h-[300px] p-3 text-sm border border-gray-300 rounded-lg font-mono whitespace-pre overflow-auto focus:ring-2 focus:ring-blue-500 outline-none" placeholder='Paste your comma-separated (CSV) data here...'></textarea>
+                </div>
+
+                <!-- Column Mapping Grid (Hidden for Group Vouchers) -->
+                <div id="mappingSection" class="bg-blue-50 border border-blue-100 p-4 rounded-lg fade-transition">
+                    <h3 class="text-sm font-semibold text-blue-900 mb-3 flex items-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-1.5"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+                        Column Mapping (Ledger Mode)
+                    </h3>
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <div>
+                            <label class="block text-[11px] font-semibold text-gray-600 uppercase tracking-wide mb-1">Date</label>
+                            <select id="mapDate" class="w-full text-sm border border-gray-300 rounded p-1.5 bg-white outline-none focus:ring-1 focus:ring-blue-500"></select>
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-semibold text-gray-600 uppercase tracking-wide mb-1">Dr/Cr</label>
+                            <select id="mapDrCr" class="w-full text-sm border border-gray-300 rounded p-1.5 bg-white outline-none focus:ring-1 focus:ring-blue-500"></select>
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-semibold text-gray-600 uppercase tracking-wide mb-1">Particulars</label>
+                            <select id="mapParticulars" class="w-full text-sm border border-gray-300 rounded p-1.5 bg-white outline-none focus:ring-1 focus:ring-blue-500"></select>
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-semibold text-gray-600 uppercase tracking-wide mb-1">Vch Type</label>
+                            <select id="mapVchType" class="w-full text-sm border border-gray-300 rounded p-1.5 bg-white outline-none focus:ring-1 focus:ring-blue-500"></select>
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-semibold text-gray-600 uppercase tracking-wide mb-1">Vch No.</label>
+                            <select id="mapVchNo" class="w-full text-sm border border-gray-300 rounded p-1.5 bg-white outline-none focus:ring-1 focus:ring-blue-500"></select>
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-semibold text-gray-600 uppercase tracking-wide mb-1">Debit</label>
+                            <select id="mapDebit" class="w-full text-sm border border-gray-300 rounded p-1.5 bg-white outline-none focus:ring-1 focus:ring-blue-500"></select>
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-semibold text-gray-600 uppercase tracking-wide mb-1">Credit</label>
+                            <select id="mapCredit" class="w-full text-sm border border-gray-300 rounded p-1.5 bg-white outline-none focus:ring-1 focus:ring-blue-500"></select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Notice for Group Mode -->
+                <div id="groupModeNotice" style="display: none;" class="bg-indigo-50 border border-indigo-100 p-4 rounded-lg fade-transition text-sm text-indigo-800">
+                    <div class="flex items-start">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2 flex-shrink-0 mt-0.5"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+                        <p><strong>Automatic Mapping Enabled:</strong> Group Vouchers have a rigid structure (Date on top, Vch No. on bottom, negative amounts = debits). The system will extract the data automatically without manual column mapping.</p>
+                    </div>
+                </div>
+
+                <div id="ledgerSettings" class="p-4 bg-gray-50 rounded-lg space-y-3">
+                    <h3 class="text-sm font-semibold text-gray-700">Cleaning Rules (Ledger Mode)</h3>
+                    <label class="flex items-center space-x-3 cursor-pointer">
+                        <input type="checkbox" id="removeAsPerDetails" checked class="w-4 h-4 text-blue-600 rounded focus:ring-blue-500">
+                        <span class="text-sm">Remove <b>"(as per details)"</b> main rows (keep sub-rows)</span>
+                    </label>
+                    <label class="flex items-center space-x-3 cursor-pointer">
+                        <input type="checkbox" id="swapDrCr" checked class="w-4 h-4 text-blue-600 rounded focus:ring-blue-500">
+                        <span class="text-sm">Swap split entry Dr/Cr (e.g. Move <b>"Cr"</b> text to Debit column)</span>
+                    </label>
+                </div>
+
+                <div class="flex space-x-3 mt-4">
+                    <button onclick="processData()" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-lg flex items-center justify-center transition">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2"><path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/></svg>
+                        Process & Clean Data
+                    </button>
+                    <button onclick="clearData()" class="p-3 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg transition" title="Clear Grid">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Right Panel: Output -->
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col h-[85vh]">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="font-semibold text-lg flex items-center">
+                        3. Cleaned Result
+                    </h2>
+                    
+                    <div id="actionButtons" class="flex space-x-2" style="display: none;">
+                        <button id="accuracyBtn" onclick="toggleAccuracyReport()" class="flex items-center px-3 py-1.5 text-sm bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded transition" title="Validate sum of Debits & Credits per Voucher">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                            Check Accuracy
+                        </button>
+                        <button id="copyBtn" onclick="copyToClipboard()" class="flex items-center px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 rounded transition">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                            Copy for Excel
+                        </button>
+                        <button onclick="downloadCSV()" class="flex items-center px-3 py-1.5 text-sm bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 rounded transition">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" x2="3"/></svg>
+                            CSV
+                        </button>
+                    </div>
+                </div>
+
+                <div class="flex-grow overflow-auto border border-gray-200 rounded-lg bg-gray-50 relative">
+                    <div id="emptyState" class="absolute inset-0 flex flex-col items-center justify-center text-gray-400 text-sm">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="mb-3 opacity-50"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+                        Processed data will appear here...
+                    </div>
+                    
+                    <div id="accuracyPanel" style="display: none;" class="m-4 p-4 rounded-lg border shadow-sm"></div>
+
+                    <div id="tableWrapper" style="display: none;">
+                        <table class="w-full text-sm text-left whitespace-nowrap">
+                            <thead class="text-xs text-gray-700 uppercase bg-gray-100 sticky top-0 shadow-sm z-10">
+                                <tr>
+                                    <th class="px-4 py-3">Date</th>
+                                    <th class="px-4 py-3">Cr/Dr</th>
+                                    <th class="px-4 py-3">Particulars</th>
+                                    <th class="px-4 py-3">Vch Type</th>
+                                    <th class="px-4 py-3">Vch No.</th>
+                                    <th class="px-4 py-3 text-right">Debit</th>
+                                    <th class="px-4 py-3 text-right">Credit</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tableBody">
+                                <!-- Data injected here via JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div id="recordCount" class="mt-3 text-xs text-gray-500 text-right" style="display: none;">
+                    Showing 0 records
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let outputData = [];
+        let spreadsheet;
+        let isAccuracyPanelOpen = false;
+        
+        // Registry to store parent main row totals for offline mathematical validation
+        let voucherMainRowsRegistry = {};
+
+        // Initialize jspreadsheet on window load
+        window.onload = function() {
+            spreadsheet = jspreadsheet(document.getElementById('spreadsheet'), {
+                data: [['', '', '', '', '', '', '', '', '', '']],
+                minDimensions: [10, 15],
+                defaultColWidth: 90,
+                tableOverflow: true,
+                tableHeight: '300px',
+                allowInsertColumn: true,
+                allowInsertRow: true,
+                columnDrag: true,
+                contextMenu: function() { return []; } // Simplify context menu
+            });
+            populateMappingSelects();
+        };
+
+        function toggleModeUI() {
+            const mode = document.querySelector('input[name="formatMode"]:checked').value;
+            const inputMethod = document.querySelector('input[name="inputMethod"]:checked').value;
+            
+            const mappingSection = document.getElementById('mappingSection');
+            const groupModeNotice = document.getElementById('groupModeNotice');
+            const ledgerSettings = document.getElementById('ledgerSettings');
+            const gridInput = document.getElementById('gridInputContainer');
+            const csvInput = document.getElementById('csvInputContainer');
+
+            if (inputMethod === 'csv') {
+                gridInput.style.display = 'none';
+                csvInput.style.display = 'block';
+                mappingSection.style.display = 'none';
+                groupModeNotice.style.display = 'block';
+                groupModeNotice.innerHTML = `<div class="flex items-start"><svg class="mr-2 flex-shrink-0 mt-0.5" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg><p><strong>Smart CSV Parsing Enabled:</strong> The system automatically detects block structures, extracting nested ledgers and fixing unbalanced main rows mathematically without column mapping.</p></div>`;
+            } else {
+                gridInput.style.display = 'block';
+                csvInput.style.display = 'none';
+                if (mode === 'group') {
+                    mappingSection.style.display = 'none';
+                    ledgerSettings.style.display = 'none';
+                    groupModeNotice.style.display = 'block';
+                    groupModeNotice.innerHTML = `<div class="flex items-start"><svg class="mr-2 flex-shrink-0 mt-0.5" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg><p><strong>Automatic Mapping Enabled:</strong> Group Vouchers have a rigid structure. The system will extract the data automatically.</p></div>`;
+                } else {
+                    mappingSection.style.display = 'block';
+                    ledgerSettings.style.display = 'block';
+                    groupModeNotice.style.display = 'none';
+                }
+            }
+        }
+
+        function populateMappingSelects() {
+            const fields = ['mapDate', 'mapDrCr', 'mapParticulars', 'mapVchType', 'mapVchNo', 'mapDebit', 'mapCredit'];
+            // Standard Tally export mapping defaults: A(0), B(1), C(2), F(5), G(6), H(7), I(8)
+            const defaultMappings = [0, 1, 2, 5, 6, 7, 8]; 
+
+            fields.forEach((field, index) => {
+                const select = document.getElementById(field);
+                select.innerHTML = '';
+                for (let i = 0; i < 26; i++) {
+                    const colLetter = String.fromCharCode(65 + i); 
+                    const option = document.createElement('option');
+                    option.value = i;
+                    option.text = `Column ${colLetter}`;
+                    if (i === defaultMappings[index]) option.selected = true;
+                    select.appendChild(option);
+                }
+            });
+        }
+
+        function loadExample() {
+            const mode = document.querySelector('input[name="formatMode"]:checked').value;
+            const inputMethod = document.querySelector('input[name="inputMethod"]:checked').value;
+
+            if (inputMethod === 'csv') {
+                if (mode === 'ledger') {
+                    const exampleCSV = `1-Jul-26,"(as per details)","","Jrnl",-16714.80,,
+"Lease Exp_HYD",-185720.00,,
+"Input CGST-HYD",-16714.80,,
+"TDS 194I 2% Plant & Equipment",,3714.00,
+"Dream Road Techonologies Pvt. Ltd.",,215435.60,
+"(No. :4553)",`;
+                    document.getElementById('csvTextArea').value = exampleCSV;
+                } else {
+                    const exampleCSV = `1-Jul-26,"(as per details)","","Jrnl",,7429.00,
+"Lease Exp_HYD",-371435.00,,
+"Input IGST-Hyd",-66858.30,,
+"Dream Road Techonologies Pvt. Ltd.",,430864.30,
+"TDS 194I 2% Plant & Equipment",,7429.00,
+"(No. :4551)",`;
+                    document.getElementById('csvTextArea').value = exampleCSV;
+                }
+            } else {
+                const exampleData = [
+                    ['Date', 'dr/cr', 'Particulars', '', '', 'Vch Type', 'Vch No.', 'Debit', 'Credit'],
+                    ['30-Apr-25', 'Cr', '(as per details)', '', '', 'Journal', '1096', '224576.00', ''],
+                    ['', '', 'Joining Fee_HYD', '', '', '', '', '', '26695.00 Cr'],
+                    ['', '', 'Joining Fee_KAR', '', '', '', '', '', '148305.00 Cr'],
+                    ['', '', 'Joining Fee_MUM', '', '', '', '', '', '49576.00 Cr']
+                ];
+                spreadsheet.setData(exampleData);
+            }
+        }
+
+        function clearData() {
+            spreadsheet.setData([['', '', '', '', '', '', '', '', '', '']]);
+            document.getElementById('csvTextArea').value = '';
+            outputData = [];
+            voucherMainRowsRegistry = {};
+            isAccuracyPanelOpen = false;
+            document.getElementById('accuracyPanel').style.display = 'none';
+            renderTable();
+        }
+
+        function formatAmount(val) {
+            if (!val && val !== 0) return '';
+            const num = parseFloat(val);
+            if (isNaN(num)) return val;
+            return num.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+
+        // Helper function to parse raw CSV text properly, handling quotes and nested commas
+        function parseCSV(str) {
+            const arr = [];
+            let quote = false;
+            let col = 0, row = 0;
+            for (let c = 0; c < str.length; c++) {
+                let cc = str[c], nc = str[c+1];
+                arr[row] = arr[row] || [];
+                arr[row][col] = arr[row][col] || '';
+                
+                if (cc === '"' && quote && nc === '"') { arr[row][col] += cc; ++c; continue; }
+                if (cc === '"') { quote = !quote; continue; }
+                if (cc === ',' && !quote) { ++col; continue; }
+                if (cc === '\r' && nc === '\n' && !quote) { ++row; col = 0; ++c; continue; }
+                if (cc === '\n' && !quote) { ++row; col = 0; continue; }
+                if (cc === '\r' && !quote) { ++row; col = 0; continue; }
+                
+                arr[row][col] += cc;
+            }
+            return arr;
+        }
+
+        function processData() {
+            const mode = document.querySelector('input[name="formatMode"]:checked').value;
+            const inputMethod = document.querySelector('input[name="inputMethod"]:checked').value;
+            let data = [];
+
+            if (inputMethod === 'csv') {
+                const csvText = document.getElementById('csvTextArea').value;
+                if (!csvText || csvText.trim() === '') {
+                    alert('Please paste some CSV data into the text area first.');
+                    return;
+                }
+                data = parseCSV(csvText);
+            } else {
+                data = spreadsheet.getData();
+                const isEmpty = data.every(row => row.every(cell => !cell || cell.toString().trim() === ''));
+                if (isEmpty) {
+                    alert('Please paste some data into the grid first.');
+                    return;
+                }
+            }
+            
+            voucherMainRowsRegistry = {}; // Reset registry
+
+            if (inputMethod === 'csv') {
+                processUniversalCSV(data);
+            } else if (mode === 'ledger') {
+                processLedgerData(data);
+            } else {
+                processGroupVoucherData(data);
+            }
+
+            isAccuracyPanelOpen = false;
+            document.getElementById('accuracyPanel').style.display = 'none';
+            renderTable();
+        }
+
+        function processLedgerData(data) {
+            const removeAsPerDetails = document.getElementById('removeAsPerDetails').checked;
+            const swapDrCr = document.getElementById('swapDrCr').checked;
+
+            const mapping = {
+                date: parseInt(document.getElementById('mapDate').value),
+                drCr: parseInt(document.getElementById('mapDrCr').value),
+                particulars: parseInt(document.getElementById('mapParticulars').value),
+                vchType: parseInt(document.getElementById('mapVchType').value),
+                vchNo: parseInt(document.getElementById('mapVchNo').value),
+                debit: parseInt(document.getElementById('mapDebit').value),
+                credit: parseInt(document.getElementById('mapCredit').value)
+            };
+
+            const result = [];
+            let currentContext = null;
+
+            for (let i = 0; i < data.length; i++) {
+                const row = data[i];
+                if (row.every(cell => !cell || cell.toString().trim() === '')) continue;
+
+                const dateStr = row[mapping.date] ? row[mapping.date].toString().trim() : '';
+                if (dateStr.toLowerCase().includes('date')) continue; // Skip headers
+
+                const dateRegex = /^\d{1,2}-[a-zA-Z]{3}-\d{2,4}$/;
+                const hasDate = dateRegex.test(dateStr);
+
+                if (hasDate) {
+                    currentContext = {
+                        date: dateStr,
+                        drCr: row[mapping.drCr] ? row[mapping.drCr].toString().trim() : '',
+                        vchType: row[mapping.vchType] ? row[mapping.vchType].toString().trim() : '',
+                        vchNo: row[mapping.vchNo] ? row[mapping.vchNo].toString().trim() : ''
+                    };
+
+                    const particulars = row[mapping.particulars] ? row[mapping.particulars].toString().trim() : '';
+                    const isAsPerDetails = particulars.toLowerCase().includes('(as per details)');
+                    
+                    const debitCleaned = (row[mapping.debit] ? row[mapping.debit].toString() : '').replace(/[^\d.]/g, '');
+                    const creditCleaned = (row[mapping.credit] ? row[mapping.credit].toString() : '').replace(/[^\d.]/g, '');
+                    const debitNum = parseFloat(debitCleaned) || 0;
+                    const creditNum = parseFloat(creditCleaned) || 0;
+
+                    if (isAsPerDetails && currentContext.vchNo) {
+                        const vNo = currentContext.vchNo;
+                        if (!voucherMainRowsRegistry[vNo]) {
+                            voucherMainRowsRegistry[vNo] = { debit: 0, credit: 0, wasRemoved: false };
+                        }
+                        voucherMainRowsRegistry[vNo].debit += debitNum;
+                        voucherMainRowsRegistry[vNo].credit += creditNum;
+                        if (removeAsPerDetails) voucherMainRowsRegistry[vNo].wasRemoved = true;
+                    }
+
+                    if (removeAsPerDetails && isAsPerDetails) continue;
+                    
+                    result.push({
+                        date: currentContext.date, drCr: currentContext.drCr, particulars: particulars,
+                        vchType: currentContext.vchType, vchNo: currentContext.vchNo,
+                        debit: formatAmount(debitCleaned), credit: formatAmount(creditCleaned)
+                    });
+                } else {
+                    if (!currentContext) continue; 
+
+                    let particulars = row[mapping.particulars] ? row[mapping.particulars].toString().trim() : '';
+                    if (!particulars) {
+                        for(let j = 0; j < row.length; j++) {
+                            if(j !== mapping.date && row[j] && row[j].toString().trim() && isNaN(row[j])) {
+                                particulars = row[j].toString().trim(); break;
+                            }
+                        }
+                    }
+
+                    let amountStr = '', foundInDebitCol = false, foundInCreditCol = false;
+                    const dStr = row[mapping.debit] ? row[mapping.debit].toString().trim() : '';
+                    const cStr = row[mapping.credit] ? row[mapping.credit].toString().trim() : '';
+
+                    if (dStr && /\d/.test(dStr)) { amountStr = dStr; foundInDebitCol = true; } 
+                    else if (cStr && /\d/.test(cStr)) { amountStr = cStr; foundInCreditCol = true; } 
+                    else {
+                        for (let j = row.length - 1; j >= 0; j--) {
+                            if (row[j] && /\d/.test(row[j].toString())) { amountStr = row[j].toString().trim(); break; }
+                        }
+                    }
+
+                    const isCr = amountStr.toLowerCase().includes('cr');
+                    const isDr = amountStr.toLowerCase().includes('dr');
+                    const amountVal = amountStr.replace(/[^\d.]/g, ''); 
+
+                    let debit = '', credit = '';
+                    if (swapDrCr) {
+                        if (isCr) debit = amountVal; else if (isDr) credit = amountVal;
+                        else if (foundInDebitCol) debit = amountVal; else credit = amountVal; 
+                    } else {
+                        if (isCr) credit = amountVal; else if (isDr) debit = amountVal;
+                        else if (foundInDebitCol) debit = amountVal; else credit = amountVal; 
+                    }
+
+                    if (particulars) {
+                        result.push({
+                            date: currentContext.date, drCr: debit ? 'Dr' : 'Cr', particulars: particulars,
+                            vchType: currentContext.vchType, vchNo: currentContext.vchNo,
+                            debit: formatAmount(debit), credit: formatAmount(credit)
+                        });
+                    }
+                }
+            }
+            outputData = result;
+        }
+
+        function processUniversalCSV(data) {
+            const removeAsPerDetails = document.getElementById('removeAsPerDetails').checked;
+            const result = [];
+            let currentDate = "";
+            let currentVchType = "";
+            let topRowLedger = "";
+            let topRowDebit = 0;
+            let topRowCredit = 0;
+            let subEntries = [];
+            
+            for (let i = 0; i < data.length; i++) {
+                const row = data[i];
+                if (row.every(cell => !cell || cell.toString().trim() === '')) continue;
+                
+                const col0 = row[0] ? row[0].toString().trim() : '';
+                
+                // 1. Detect Top Row (Date)
+                const dateRegex = /^\d{1,2}-[a-zA-Z]{3}-\d{2,4}$/;
+                if (dateRegex.test(col0)) {
+                    currentDate = col0;
+                    topRowLedger = row[1] ? row[1].toString().trim() : '(as per details)';
+                    currentVchType = row[3] ? row[3].toString().trim() : '';
+                    
+                    topRowDebit = 0;
+                    topRowCredit = 0;
+                    
+                    // Extract amount from main row if it exists (col 4 or 5)
+                    const val4 = row[4] ? row[4].toString().trim() : '';
+                    const val5 = row[5] ? row[5].toString().trim() : '';
+                    
+                    if (val4) {
+                        const num = parseFloat(val4.replace(/,/g, ''));
+                        if (!isNaN(num)) {
+                            if (num < 0) topRowDebit = Math.abs(num);
+                            else topRowCredit = Math.abs(num);
+                        }
+                    }
+                    if (val5) {
+                        const num = parseFloat(val5.replace(/,/g, ''));
+                        if (!isNaN(num)) {
+                            if (num < 0) topRowDebit = Math.abs(num);
+                            else topRowCredit = Math.abs(num);
+                        }
+                    }
+                    
+                    subEntries = []; // reset for new block
+                    continue;
+                }
+                
+                // 2. Detect Bottom Row (Voucher Number)
+                if (col0.startsWith("(No.") || col0.match(/\(No\.\s*:\s*(.*?)\)/i)) {
+                    let vchNo = col0;
+                    const vchMatch = col0.match(/\(No\.\s*:\s*(.*?)\)/i);
+                    if (vchMatch) {
+                        vchNo = vchMatch[1].trim();
+                    } else {
+                        vchNo = col0.replace("(No.", "").replace(":", "").replace(")", "").trim();
+                    }
+                    
+                    // Auto-Balance check (fixes Ledger Detailed missing row)
+                    let sumDr = 0;
+                    let sumCr = 0;
+                    subEntries.forEach(e => {
+                        sumDr += (parseFloat(e.debit) || 0);
+                        sumCr += (parseFloat(e.credit) || 0);
+                    });
+                    
+                    const diff = Math.abs(sumDr - sumCr);
+                    if (diff > 0.01 && (topRowDebit > 0 || topRowCredit > 0)) {
+                        const testDr = sumDr + topRowDebit;
+                        const testCr = sumCr + topRowCredit;
+                        if (Math.abs(testDr - testCr) < 0.01) {
+                            subEntries.unshift({
+                                ledger: topRowLedger,
+                                debit: topRowDebit ? topRowDebit.toString() : '',
+                                credit: topRowCredit ? topRowCredit.toString() : '',
+                                isMainRow: true
+                            });
+                        }
+                    }
+                    
+                    // Flush accumulated entries
+                    subEntries.forEach(entry => {
+                        if (entry.isMainRow && removeAsPerDetails && entry.ledger.toLowerCase().includes('as per details')) {
+                            // register for accuracy checker
+                            if (!voucherMainRowsRegistry[vchNo]) {
+                                voucherMainRowsRegistry[vchNo] = { debit: 0, credit: 0, wasRemoved: true };
+                            }
+                            voucherMainRowsRegistry[vchNo].debit += parseFloat(entry.debit) || 0;
+                            voucherMainRowsRegistry[vchNo].credit += parseFloat(entry.credit) || 0;
+                            return; 
+                        }
+                        
+                        result.push({
+                            date: currentDate,
+                            drCr: entry.debit ? 'Dr' : 'Cr',
+                            particulars: entry.ledger,
+                            vchType: currentVchType,
+                            vchNo: vchNo,
+                            debit: formatAmount(entry.debit),
+                            credit: formatAmount(entry.credit)
+                        });
+                    });
+                    
+                    currentDate = "";
+                    continue;
+                }
+                
+                // 3. Middle Rows
+                if (currentDate) {
+                    const ledger = col0;
+                    if (!ledger) continue;
+                    
+                    const strCol1 = row[1] ? row[1].toString().trim() : '';
+                    const strCol2 = row[2] ? row[2].toString().trim() : '';
+                    
+                    let debitVal = '';
+                    let creditVal = '';
+                    
+                    if (strCol1) {
+                        const num1 = parseFloat(strCol1.replace(/,/g, ''));
+                        if (!isNaN(num1)) {
+                            if (num1 < 0) debitVal = Math.abs(num1).toString();
+                            else creditVal = num1.toString();
+                        }
+                    }
+                    
+                    if (strCol2 && !creditVal) {
+                        const num2 = parseFloat(strCol2.replace(/,/g, ''));
+                        if (!isNaN(num2)) {
+                            if (num2 > 0) creditVal = num2.toString();
+                            else debitVal = Math.abs(num2).toString();
+                        }
+                    }
+                    
+                    if (debitVal || creditVal) {
+                        subEntries.push({
+                            ledger: ledger,
+                            debit: debitVal,
+                            credit: creditVal,
+                            isMainRow: false
+                        });
+                    }
+                }
+            }
+            outputData = result;
+        }
+
+        function processGroupVoucherData(data) {
+            const result = [];
+            let currentDate = "";
+            let currentVchType = "";
+            let subEntries = [];
+            
+            for (let i = 0; i < data.length; i++) {
+                const row = data[i];
+                if (row.every(cell => !cell || cell.toString().trim() === '')) continue;
+                
+                const col0 = row[0] ? row[0].toString().trim() : '';
+                
+                // 1. Detect Top Row (Date)
+                const dateRegex = /^\d{1,2}-[a-zA-Z]{3}-\d{2,4}$/;
+                if (dateRegex.test(col0)) {
+                    currentDate = col0;
+                    currentVchType = row[3] ? row[3].toString().trim() : '';
+                    subEntries = []; // reset for new block
+                    continue;
+                }
+                
+                // 2. Detect Bottom Row (Voucher Number ending the block)
+                if (col0.startsWith("(No.") || col0.match(/\(No\.\s*:\s*(.*?)\)/i)) {
+                    let vchNo = col0;
+                    const vchMatch = col0.match(/\(No\.\s*:\s*(.*?)\)/i);
+                    if (vchMatch) {
+                        vchNo = vchMatch[1].trim();
+                    } else {
+                        // Fallback replacement if regex misses edge cases
+                        vchNo = col0.replace("(No.", "").replace(":", "").replace(")", "").trim();
+                    }
+                    
+                    // Flush accumulated block entries to result
+                    subEntries.forEach(entry => {
+                        result.push({
+                            date: currentDate,
+                            drCr: entry.debit ? 'Dr' : 'Cr',
+                            particulars: entry.ledger,
+                            vchType: currentVchType,
+                            vchNo: vchNo,
+                            debit: formatAmount(entry.debit),
+                            credit: formatAmount(entry.credit)
+                        });
+                    });
+                    
+                    // Clear context
+                    currentDate = "";
+                    currentVchType = "";
+                    subEntries = [];
+                    continue;
+                }
+                
+                // 3. Middle Rows (Ledgers & Amounts)
+                if (currentDate) {
+                    const ledger = col0;
+                    if (!ledger || ledger.toLowerCase().includes("as per details")) continue;
+                    
+                    const strCol1 = row[1] ? row[1].toString().trim() : '';
+                    const strCol2 = row[2] ? row[2].toString().trim() : '';
+                    
+                    let debitVal = '';
+                    let creditVal = '';
+                    
+                    // Group Voucher format usually puts Debits as negative in col 1, Credits as positive in col 2 (or 1)
+                    if (strCol1) {
+                        const num1 = parseFloat(strCol1.replace(/,/g, ''));
+                        if (!isNaN(num1) && num1 < 0) {
+                            debitVal = Math.abs(num1).toString();
+                        } else if (!isNaN(num1) && num1 > 0) {
+                            creditVal = num1.toString();
+                        }
+                    }
+                    
+                    if (strCol2 && !creditVal) {
+                        const num2 = parseFloat(strCol2.replace(/,/g, ''));
+                        if (!isNaN(num2) && num2 > 0) {
+                            creditVal = num2.toString();
+                        }
+                    }
+                    
+                    if (debitVal || creditVal) {
+                        subEntries.push({
+                            ledger: ledger,
+                            debit: debitVal,
+                            credit: creditVal
+                        });
+                    }
+                }
+            }
+            outputData = result;
+        }
+
+        function toggleAccuracyReport() {
+            const panel = document.getElementById('accuracyPanel');
+            isAccuracyPanelOpen = !isAccuracyPanelOpen;
+            if (!isAccuracyPanelOpen) { panel.style.display = 'none'; return; }
+
+            const vchGroups = {};
+            outputData.forEach(row => {
+                const vchNo = row.vchNo;
+                if (!vchNo) return; 
+                if (!vchGroups[vchNo]) vchGroups[vchNo] = { subDebit: 0, subCredit: 0 };
+                
+                const dr = parseFloat(row.debit.replace(/,/g, '')) || 0;
+                const cr = parseFloat(row.credit.replace(/,/g, '')) || 0;
+
+                vchGroups[vchNo].subDebit += dr;
+                vchGroups[vchNo].subCredit += cr;
+            });
+
+            const allVouchers = new Set([...Object.keys(vchGroups), ...Object.keys(voucherMainRowsRegistry)]);
+            const discrepancies = [];
+            const balancedList = [];
+
+            allVouchers.forEach(vchNo => {
+                const subs = vchGroups[vchNo] || { subDebit: 0, subCredit: 0 };
+                const registry = voucherMainRowsRegistry[vchNo] || { debit: 0, credit: 0, wasRemoved: false };
+
+                const evaluatedDebit = subs.subDebit - (registry.wasRemoved ? registry.debit : 0);
+                const evaluatedCredit = subs.subCredit - (registry.wasRemoved ? registry.credit : 0);
+                const difference = Math.abs(evaluatedDebit - evaluatedCredit);
+
+                const auditLine = {
+                    vchNo: vchNo, subDebit: subs.subDebit, subCredit: subs.subCredit,
+                    removedDebit: registry.wasRemoved ? registry.debit : 0,
+                    removedCredit: registry.wasRemoved ? registry.credit : 0,
+                    evaluatedDebit: evaluatedDebit, evaluatedCredit: evaluatedCredit,
+                    difference: difference, wasRemoved: registry.wasRemoved
+                };
+
+                if (difference > 0.01) discrepancies.push(auditLine);
+                else balancedList.push(auditLine);
+            });
+
+            let reportHTML = `<div class="flex justify-between items-center mb-3">
+                                <h3 class="font-bold text-gray-800">Voucher Balancing Verification</h3>
+                                <button onclick="toggleAccuracyReport()" class="text-gray-500 hover:text-gray-800">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                </button>
+                              </div>`;
+
+            if (discrepancies.length === 0) {
+                panel.className = "m-4 p-4 rounded-lg border shadow-sm bg-green-50 border-green-200";
+                reportHTML += `<div class="flex items-center text-green-700 mb-3 text-sm">
+                                  <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                                  <span class="font-medium">All generated vouchers perfectly balance to 0 (Double-entry matches).</span>
+                               </div>`;
+            } else {
+                panel.className = "m-4 p-4 rounded-lg border shadow-sm bg-red-50 border-red-200";
+                reportHTML += `<div class="flex items-start text-red-700 mb-3 text-sm">
+                                  <svg class="w-5 h-5 mr-2 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                                  <span>Found ${discrepancies.length} voucher(s) with mismatched amounts. Please review sub-rows in raw sheet.</span>
+                               </div>`;
+            }
+
+            reportHTML += `<div class="max-h-60 overflow-y-auto bg-white border border-gray-100 rounded shadow-inner">
+                            <table class="w-full text-xs text-left whitespace-nowrap">
+                                <thead class="bg-gray-100 text-gray-700 sticky top-0">
+                                    <tr>
+                                        <th class="px-3 py-2">Vch No.</th>
+                                        <th class="px-3 py-2 text-right">Debit Total</th>
+                                        <th class="px-3 py-2 text-right">Credit Total</th>
+                                        <th class="px-3 py-2 text-right font-semibold">Difference</th>
+                                    </tr>
+                                </thead>
+                                <tbody>`;
+
+            const appendRows = (list, isDiscrepancy) => {
+                list.forEach(d => {
+                    reportHTML += `<tr class="border-b border-gray-50 hover:bg-gray-50 transition">
+                                      <td class="px-3 py-2 font-medium">${d.vchNo}</td>
+                                      <td class="px-3 py-2 text-right text-gray-800">${d.evaluatedDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                                      <td class="px-3 py-2 text-right text-gray-800">${d.evaluatedCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                                      <td class="px-3 py-2 text-right font-bold ${isDiscrepancy ? 'text-red-600' : 'text-green-600'}">
+                                          ${d.difference.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                      </td>
+                                   </tr>`;
+                });
+            };
+
+            appendRows(discrepancies, true);
+            appendRows(balancedList, false);
+            reportHTML += `</tbody></table></div>`;
+            panel.innerHTML = reportHTML;
+            panel.style.display = 'block';
+        }
+
+        function renderTable() {
+            const emptyState = document.getElementById('emptyState');
+            const tableWrapper = document.getElementById('tableWrapper');
+            const actionButtons = document.getElementById('actionButtons');
+            const recordCount = document.getElementById('recordCount');
+            const tbody = document.getElementById('tableBody');
+
+            if (outputData.length === 0) {
+                emptyState.style.display = 'flex';
+                tableWrapper.style.display = 'none';
+                actionButtons.style.display = 'none';
+                recordCount.style.display = 'none';
+                return;
+            }
+
+            emptyState.style.display = 'none';
+            tableWrapper.style.display = 'block';
+            actionButtons.style.display = 'flex';
+            recordCount.style.display = 'block';
+            recordCount.innerText = `Showing ${outputData.length} records`;
+
+            tbody.innerHTML = '';
+            
+            outputData.forEach(row => {
+                const tr = document.createElement('tr');
+                tr.className = 'bg-white border-b hover:bg-blue-50 transition';
+                tr.innerHTML = `
+                    <td class="px-4 py-2 font-medium">${row.date}</td>
+                    <td class="px-4 py-2 text-gray-600">${row.drCr}</td>
+                    <td class="px-4 py-2">${row.particulars}</td>
+                    <td class="px-4 py-2 text-gray-600">${row.vchType}</td>
+                    <td class="px-4 py-2 text-gray-600">${row.vchNo}</td>
+                    <td class="px-4 py-2 text-right font-mono text-blue-700">${row.debit}</td>
+                    <td class="px-4 py-2 text-right font-mono text-green-700">${row.credit}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function copyToClipboard() {
+            if (outputData.length === 0) return;
+            const header = ['Date', 'Cr/Dr', 'Particulars', 'Vch Type', 'Vch No.', 'Debit', 'Credit'].join('\t');
+            const rows = outputData.map(r => [r.date, r.drCr, r.particulars, r.vchType, r.vchNo, r.debit, r.credit].join('\t'));
+            const textToCopy = [header, ...rows].join('\n');
+            
+            try {
+                if (navigator.clipboard && window.isSecureContext) {
+                    navigator.clipboard.writeText(textToCopy);
+                    showCopySuccess();
+                } else {
+                    const textArea = document.createElement("textarea");
+                    textArea.value = textToCopy;
+                    textArea.style.position = "fixed";
+                    textArea.style.left = "-999999px";
+                    document.body.appendChild(textArea);
+                    textArea.focus();
+                    textArea.select();
+                    document.execCommand('copy');
+                    textArea.remove();
+                    showCopySuccess();
+                }
+            } catch (err) {
+                alert('Could not copy directly. Please use the CSV download instead.');
+            }
+        }
+
+        function showCopySuccess() {
+            const btn = document.getElementById('copyBtn');
+            const originalHTML = btn.innerHTML;
+            btn.innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2 text-green-600"><polyline points="20 6 9 17 4 12"/></svg>
+                <span class="text-green-700 font-medium">Copied!</span>
+            `;
+            setTimeout(() => { btn.innerHTML = originalHTML; }, 2000);
+        }
+
+        function downloadCSV() {
+            if (outputData.length === 0) return;
+            const escapeCsv = (str) => `"${str.replace(/"/g, '""')}"`;
+            const header = ['Date', 'Cr/Dr', 'Particulars', 'Vch Type', 'Vch No.', 'Debit', 'Credit'].join(',');
+            const rows = outputData.map(r => 
+                [r.date, r.drCr, escapeCsv(r.particulars), r.vchType, r.vchNo, escapeCsv(r.debit), escapeCsv(r.credit)].join(',')
+            );
+
+            const csvData = [header, ...rows].join('\n');
+            const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            
+            const link = document.createElement('a');
+            link.setAttribute('href', url);
+            link.setAttribute('download', 'cleaned_tally_data.csv');
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    </script>
+</body>
+</html>
