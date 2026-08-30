@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Modern Invoice Extractor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc; /* Very light slate */
+        }
+        /* Custom scrollbar for a modern feel */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        /* Modern Table Styles */
+        table { border-collapse: separate; border-spacing: 0; width: 100%; }
+        th { 
+            background-color: #f8fafc; 
+            font-weight: 600; 
+            color: #475569; 
+            text-transform: uppercase; 
+            font-size: 0.75rem; 
+            letter-spacing: 0.05em;
+            border-bottom: 1px solid #e2e8f0;
+            padding: 12px 16px;
+        }
+        td { 
+            border-bottom: 1px solid #f1f5f9; 
+            padding: 12px 16px; 
+            color: #334155;
+            font-size: 0.875rem;
+        }
+        tbody tr:hover td { background-color: #f1f5f9; transition: background-color 0.2s; }
+        tbody tr:last-child td { border-bottom: none; }
+    </style>
+</head>
+<body class="min-h-screen p-4 sm:p-8 text-slate-800">
+    <div class="max-w-7xl mx-auto space-y-6">
+        
+        <!-- Header -->
+        <header class="mb-8">
+            <h1 class="text-3xl font-bold text-slate-900 tracking-tight">Invoice Extractor</h1>
+            <p class="text-slate-500 mt-2">Upload invoices (PDF or Images) to automatically extract structured table data.</p>
+        </header>
+
+        <!-- API Key Section (For local use) -->
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 sm:p-8 mb-6">
+            <label for="api-key-input" class="block text-sm font-medium text-slate-700 mb-2">Gemini API Key (Required for local use)</label>
+            <input type="password" id="api-key-input" placeholder="Enter your Gemini API Key..." class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-shadow text-sm">
+            <p class="mt-2 text-xs text-slate-500">Leave blank if testing within this chat interface. To run locally, get a free key from <a href="https://aistudio.google.com/" target="_blank" class="text-indigo-600 hover:underline">Google AI Studio</a>.</p>
+        </div>
+
+        <!-- Upload Section -->
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 sm:p-8">
+            <div class="mb-4">
+                <div id="drop-zone" class="flex flex-col items-center justify-center w-full h-48 border-2 border-slate-300 border-dashed rounded-xl cursor-pointer bg-slate-50 hover:bg-slate-100 transition-colors duration-200">
+                    <div class="flex flex-col items-center justify-center pt-5 pb-6">
+                        <svg class="w-10 h-10 mb-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                        </svg>
+                        <p class="mb-2 text-sm text-slate-500"><span class="font-semibold text-indigo-600">Click to upload</span> or drag and drop</p>
+                        <p class="text-xs text-slate-400">PDF, PNG, JPG (Max 10MB per file)</p>
+                    </div>
+                    <input id="file-upload" type="file" class="hidden" accept="image/*,application/pdf" multiple />
+                </div>
+            </div>
+
+            <!-- File List Preview -->
+            <div id="file-list" class="hidden space-y-2 mb-6 max-h-48 overflow-y-auto pr-2">
+                <!-- File items populate here -->
+            </div>
+            
+            <!-- Extract Button -->
+            <button id="extract-btn" disabled class="w-full sm:w-auto px-6 py-3 bg-indigo-600 text-white font-medium rounded-xl shadow-sm hover:bg-indigo-700 focus:ring-4 focus:ring-indigo-100 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                <span id="extract-btn-text">Extract Data</span>
+                <div id="loading-spinner" class="hidden animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full"></div>
+            </button>
+            <div id="error-message" class="hidden mt-3 text-red-500 text-sm font-medium"></div>
+        </div>
+
+        <!-- Results Section (Hidden initially) -->
+        <div id="results-section" class="hidden bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex-col">
+            
+            <!-- Toolbar -->
+            <div class="px-6 py-4 border-b border-slate-200 bg-slate-50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <h2 class="text-lg font-semibold text-slate-800">Extracted Data</h2>
+                <div class="flex gap-3 w-full sm:w-auto">
+                    <button id="copy-btn" class="flex-1 sm:flex-none px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors text-sm font-medium flex items-center justify-center gap-2 shadow-sm">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                        Copy to Excel
+                    </button>
+                    <button id="export-btn" class="flex-1 sm:flex-none px-4 py-2 bg-green-600 border border-transparent text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium flex items-center justify-center gap-2 shadow-sm">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        Export CSV
+                    </button>
+                </div>
+            </div>
+
+            <!-- Table Container -->
+            <div class="overflow-x-auto w-full">
+                <table class="min-w-full text-left whitespace-nowrap">
+                    <thead id="table-head">
+                        <!-- Headers injected here -->
+                    </thead>
+                    <tbody id="table-body">
+                        <!-- Data injected here -->
+                    </tbody>
+                </table>
+            </div>
+            <div class="px-6 py-4 border-t border-slate-200 bg-slate-50 text-xs text-slate-500">
+                Data generated by AI. Please verify for accuracy.
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const fileInput = document.getElementById('file-upload');
+        const dropZone = document.getElementById('drop-zone');
+        const fileListContainer = document.getElementById('file-list');
+        const extractBtn = document.getElementById('extract-btn');
+        const extractBtnText = document.getElementById('extract-btn-text');
+        const loadingSpinner = document.getElementById('loading-spinner');
+        const errorMessage = document.getElementById('error-message');
+        const resultsSection = document.getElementById('results-section');
+        const tableHead = document.getElementById('table-head');
+        const tableBody = document.getElementById('table-body');
+        const copyBtn = document.getElementById('copy-btn');
+        const exportBtn = document.getElementById('export-btn');
+
+        let currentFiles = [];
+        let currentFlattenedData = [];
+
+        // Simplified Schema targeting exactly the requested fields
+        const invoiceSchema = {
+            type: "OBJECT",
+            properties: {
+                "GSTN": { type: "STRING" },
+                "invoiceNumber": { type: "STRING" },
+                "invoiceDate": { type: "STRING" },
+                "invoicePeriod": { type: "STRING" },
+                "placeOfSupply": { type: "STRING" },
+                "totalNetAmount": { type: "STRING" },
+                "totalAmountPayable": { type: "STRING" },
+                "lineItems": {
+                    type: "ARRAY",
+                    items: {
+                        type: "OBJECT",
+                        properties: {
+                            "taxPointDate": { type: "STRING" },
+                            "description": { type: "STRING" },
+                            "tax": { type: "STRING" },
+                            "taxAmount": { type: "STRING" }
+                        }
+                    }
+                }
+            }
+        };
+
+        const readFileAsBase64 = (file) => {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    resolve({
+                        name: file.name,
+                        mimeType: file.type,
+                        base64: e.target.result.split(',')[1],
+                        size: (file.size / 1024 / 1024).toFixed(2) + ' MB'
+                    });
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+        };
+
+        async function handleFiles(files) {
+            if (!files || files.length === 0) return;
+
+            const validFiles = Array.from(files).filter(file => 
+                file.type.startsWith('image/') || file.type === 'application/pdf'
+            );
+
+            if (validFiles.length !== files.length) {
+                showError('Some files were ignored. Please select valid images (PNG, JPG) or PDFs.');
+            }
+            if (validFiles.length === 0) return;
+
+            try {
+                const filePromises = validFiles.map(readFileAsBase64);
+                const newFilesData = await Promise.all(filePromises);
+                
+                currentFiles = newFilesData;
+                renderFileList();
+                
+                fileListContainer.classList.remove('hidden');
+                extractBtn.disabled = false;
+                resultsSection.classList.add('hidden'); // Hide previous results
+                hideError();
+                
+            } catch (err) {
+                showError('Error reading files.');
+                console.error(err);
+            }
+        }
+
+        function renderFileList() {
+            fileListContainer.innerHTML = '';
+            currentFiles.forEach(file => {
+                const item = document.createElement('div');
+                item.className = 'flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-lg';
+                
+                const isPdf = file.mimeType === 'application/pdf';
+                const iconColor = isPdf ? 'text-red-500' : 'text-indigo-500';
+                
+                item.innerHTML = `
+                    <div class="flex items-center gap-3 overflow-hidden">
+                        <svg class="h-6 w-6 ${iconColor} flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        <div class="truncate">
+                            <p class="text-sm font-medium text-slate-700 truncate">${file.name}</p>
+                            <p class="text-xs text-slate-500">${file.size}</p>
+                        </div>
+                    </div>
+                `;
+                fileListContainer.appendChild(item);
+            });
+        }
+
+        // Trigger file input on dropzone click
+        dropZone.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
+
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => {
+                dropZone.classList.add('border-indigo-400', 'bg-indigo-50');
+            }, false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => {
+                dropZone.classList.remove('border-indigo-400', 'bg-indigo-50');
+            }, false);
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            handleFiles(e.dataTransfer.files);
+        }, false);
+
+        function showError(msg) {
+            errorMessage.textContent = msg;
+            errorMessage.classList.remove('hidden');
+        }
+
+        function hideError() {
+            errorMessage.classList.add('hidden');
+        }
+
+        // Helper to strip currency symbols/commas and return a pure number
+        function cleanNumber(val) {
+            if (!val && val !== 0) return 0;
+            const cleaned = String(val).replace(/[^\d.-]/g, '');
+            const parsed = parseFloat(cleaned);
+            return isNaN(parsed) ? 0 : parsed;
+        }
+
+        // Formats the data into the exact columns requested
+        function flattenInvoiceData(allResults) {
+            const rows = [];
+            allResults.forEach(item => {
+                const inv = item.data;
+                const filename = item.filename;
+                if (!inv) return;
+
+                // Clean the total amounts
+                const cleanTotalNet = cleanNumber(inv.totalNetAmount);
+                const cleanTotalPayable = cleanNumber(inv.totalAmountPayable);
+
+                // Calculate sum of line item taxes to perform audit check against total net
+                let sumTaxAmount = 0;
+                if (inv.lineItems && inv.lineItems.length > 0) {
+                    inv.lineItems.forEach(li => {
+                        sumTaxAmount += cleanNumber(li.taxAmount);
+                    });
+                }
+
+                // Perform Audit Check (Total Net * 18% should equal sum of Tax Amounts)
+                const expectedTax = cleanTotalNet * 0.18;
+                const taxDiff = Math.abs(expectedTax - sumTaxAmount);
+                // Allow a small rounding tolerance (e.g. 2 rupees)
+                const isTaxMatch = taxDiff <= 2.0; 
+                const auditStatus = isTaxMatch ? "✅ Pass" : `❌ Fail (Diff: ${taxDiff.toFixed(2)})`;
+
+                // Consolidate line item details into single strings/sums
+                let descriptions = [];
+                let taxTypes = new Set();
+                let taxPointDates = new Set();
+                
+                if (inv.lineItems && inv.lineItems.length > 0) {
+                    inv.lineItems.forEach(li => {
+                        if (li.description) descriptions.push(li.description.trim());
+                        if (li.tax) taxTypes.add(li.tax.trim());
+                        if (li.taxPointDate) taxPointDates.add(li.taxPointDate.trim());
+                    });
+                }
+
+                // Push EXACTLY one row per invoice
+                rows.push({
+                    "File Name": filename,
+                    "GSTN": inv.GSTN || '',
+                    "Invoice Number": inv.invoiceNumber || '',
+                    "Invoice Date": inv.invoiceDate || '',
+                    "Invoice Period": inv.invoicePeriod || '',
+                    "Place of Supply": inv.placeOfSupply || '',
+                    "Tax Point Date": Array.from(taxPointDates).join(', ') || '',
+                    "Description": descriptions.join(' + ') || '',
+                    "Tax": Array.from(taxTypes).join(', ') || '',
+                    "Tax Amount": sumTaxAmount.toFixed(2),
+                    "Total Net Amount": cleanTotalNet.toFixed(2),
+                    "Total Amount Payable": cleanTotalPayable.toFixed(2),
+                    "Audit (18% Check)": auditStatus
+                });
+            });
+            return rows;
+        }
+
+        function renderTable(data) {
+            tableHead.innerHTML = '';
+            tableBody.innerHTML = '';
+            
+            if (data.length === 0) return;
+
+            const headers = Object.keys(data[0]);
+            const headerRow = document.createElement('tr');
+            headers.forEach(h => {
+                const th = document.createElement('th');
+                th.textContent = h;
+                headerRow.appendChild(th);
+            });
+            tableHead.appendChild(headerRow);
+
+            data.forEach(rowData => {
+                const tr = document.createElement('tr');
+                headers.forEach(h => {
+                    const td = document.createElement('td');
+                    td.textContent = rowData[h] !== null ? rowData[h] : '';
+                    tr.appendChild(td);
+                });
+                tableBody.appendChild(tr);
+            });
+        }
+
+        extractBtn.addEventListener('click', async () => {
+            if (currentFiles.length === 0) return;
+
+            extractBtn.disabled = true;
+            loadingSpinner.classList.remove('hidden');
+            hideError();
+            resultsSection.classList.add('hidden');
+
+            const userApiKey = document.getElementById('api-key-input')?.value.trim() || "";
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${userApiKey}`;
+
+            const prompt = `Extract the structured information from this invoice document into the requested schema fields. 
+            IMPORTANT: Ensure all amount fields (Tax Amount, Total Net Amount, Total Amount Payable) are formatted as pure numbers without currency symbols or commas (e.g., return "10220.34" instead of "₹10,220.34"). Retain negative signs if present.
+            If a value is not present, omit the field or return null. Pay attention to table line items.`;
+
+            const allResults = [];
+
+            try {
+                for (let i = 0; i < currentFiles.length; i++) {
+                    const file = currentFiles[i];
+                    extractBtnText.textContent = `Processing ${i + 1} of ${currentFiles.length}...`;
+                    
+                    const payload = {
+                        contents: [{
+                            role: "user",
+                            parts: [
+                                { text: prompt },
+                                { inlineData: { mimeType: file.mimeType, data: file.base64 } }
+                            ]
+                        }],
+                        generationConfig: {
+                            responseMimeType: "application/json",
+                            responseSchema: invoiceSchema
+                        }
+                    };
+
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (!response.ok) {
+                        if (response.status === 400 && userApiKey === "") {
+                             throw new Error("Missing API Key. Please enter your Gemini API Key in the field above to use this tool locally.");
+                        }
+                        throw new Error(`API failed with status ${response.status}`);
+                    }
+
+                    const result = await response.json();
+                    
+                    if (result.candidates?.[0]?.content?.parts?.[0]?.text) {
+                        const jsonString = result.candidates[0].content.parts[0].text;
+                        allResults.push({
+                            filename: file.name,
+                            data: JSON.parse(jsonString)
+                        });
+                    }
+                }
+
+                currentFlattenedData = flattenInvoiceData(allResults);
+                renderTable(currentFlattenedData);
+                resultsSection.classList.remove('hidden');
+                
+                // Scroll to results
+                resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+            } catch (error) {
+                console.error("Extraction error:", error);
+                showError(error.message || "An error occurred while processing the invoices. Please try again.");
+            } finally {
+                extractBtn.disabled = false;
+                extractBtnText.textContent = "Extract Data";
+                loadingSpinner.classList.add('hidden');
+            }
+        });
+
+        exportBtn.addEventListener('click', () => {
+            if (currentFlattenedData.length === 0) return;
+            
+            const headers = Object.keys(currentFlattenedData[0]);
+            const csvRows = [];
+            csvRows.push(headers.map(h => `"${h}"`).join(','));
+            
+            currentFlattenedData.forEach(row => {
+                const values = headers.map(h => {
+                    const val = row[h] === null || row[h] === undefined ? '' : String(row[h]);
+                    return `"${val.replace(/"/g, '""').replace(/\n/g, ' ')}"`;
+                });
+                csvRows.push(values.join(','));
+            });
+            
+            const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.setAttribute('download', 'extracted_invoices.csv');
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        });
+
+        copyBtn.addEventListener('click', () => {
+            if (currentFlattenedData.length === 0) return;
+            
+            const headers = Object.keys(currentFlattenedData[0]);
+            const tsvRows = [];
+            tsvRows.push(headers.join('\t'));
+            
+            currentFlattenedData.forEach(row => {
+                const values = headers.map(h => {
+                    let val = row[h] === null || row[h] === undefined ? '' : String(row[h]);
+                    return val.replace(/\t/g, ' ').replace(/\n/g, ' ');
+                });
+                tsvRows.push(values.join('\t'));
+            });
+            
+            const textToCopy = tsvRows.join('\n');
+            
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(textToCopy).then(flashCopyButton)
+                .catch(err => fallbackCopyTextToClipboard(textToCopy));
+            } else {
+                fallbackCopyTextToClipboard(textToCopy);
+            }
+        });
+
+        function fallbackCopyTextToClipboard(text) {
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            textArea.style.position = "fixed";
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            try {
+                if (document.execCommand('copy')) flashCopyButton();
+            } catch (err) {}
+            document.body.removeChild(textArea);
+        }
+
+        function flashCopyButton() {
+            const originalHTML = copyBtn.innerHTML;
+            copyBtn.innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                </svg>
+                Copied!
+            `;
+            copyBtn.classList.add('text-green-600', 'border-green-600');
+            copyBtn.classList.remove('text-slate-700', 'border-slate-300');
+            
+            setTimeout(() => {
+                copyBtn.innerHTML = originalHTML;
+                copyBtn.classList.remove('text-green-600', 'border-green-600');
+                copyBtn.classList.add('text-slate-700', 'border-slate-300');
+            }, 2000);
+        }
+    </script>
+</body>
+</html>
