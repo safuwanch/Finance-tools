@@ -1,0 +1,1088 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GSTR-1 Smart Extractor</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+        :root{
+            --ink:#152238;
+            --ink-soft:#4A5468;
+            --paper:#EEF1F5;
+            --card:#FFFFFF;
+            --line:#DCE2EA;
+            --line-strong:#B9C2D0;
+            --g1:#0F6E5E;      /* GSTR-1: outward supplies, deep teal */
+            --g1-soft:#E4F2EE;
+            --g3b:#9C5A18;     /* GSTR-3B: summary/payment, copper */
+            --g3b-soft:#FBF0E2;
+            --danger:#B02A24;
+            --danger-soft:#FBEAE9;
+            --success:#1E7B4D;
+            --success-soft:#E7F5EE;
+            --warn:#A8710F;
+            --warn-soft:#FBF1DD;
+            --accent: var(--g1);
+            --accent-soft: var(--g1-soft);
+        }
+
+        body {
+            font-family: 'IBM Plex Sans', sans-serif;
+            background-color: var(--paper);
+            background-image:
+                radial-gradient(circle at 1px 1px, rgba(21,34,56,0.05) 1px, transparent 0);
+            background-size: 22px 22px;
+        }
+        .font-display { font-family: 'Space Grotesk', sans-serif; letter-spacing: -0.01em; }
+        .font-mono-num { font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; }
+
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: var(--paper); }
+        ::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        .dropzone { transition: all 0.2s ease; }
+        .dropzone.dragover { background-color: var(--accent-soft); border-color: var(--accent); transform: scale(1.01); }
+
+        /* Perforated ticket-stub edge on the dropzone, evoking a tear-off filing stub */
+        .stub-edge {
+            background-image: radial-gradient(circle, var(--paper) 4px, transparent 4.5px);
+            background-size: 16px 16px;
+            background-position: center;
+            background-repeat: repeat-x;
+        }
+
+        /* Folder-tab style navigation, like physical filing tabs */
+        .filing-tab {
+            position: relative;
+            font-family: 'Space Grotesk', sans-serif;
+        }
+        .filing-tab.active-g1 { color: var(--g1); }
+        .filing-tab.active-g3b { color: var(--g3b); }
+
+        #toast-container { position: fixed; top: 20px; right: 20px; z-index: 50; display: flex; flex-direction: column; gap: 10px; }
+        .toast { animation: slideIn 0.3s ease-out forwards; }
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; transform: translateY(-10px); } }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col" style="color:var(--ink);">
+
+    <div id="toast-container"></div>
+
+    <header class="border-b-2 py-4 px-8 flex justify-between items-center sticky top-0 z-10" style="background:var(--card); border-color:var(--ink);">
+        <div class="flex items-center gap-4">
+            <div id="headerSeal" class="w-11 h-11 rounded-full flex items-center justify-center border-2 shrink-0" style="border-color:var(--g1); color:var(--g1);">
+                <i class="fa-solid fa-stamp text-lg"></i>
+            </div>
+            <div>
+                <h1 class="font-display text-xl font-bold leading-tight tracking-tight" style="color:var(--ink);">GSTR Smart Extractor</h1>
+                <p class="text-xs font-mono-num" id="headerSubtitle" style="color:var(--ink-soft);">GSTR-1 · Auto-detects &amp; filters non-zero value rows</p>
+            </div>
+        </div>
+        <a href="#" onclick="location.reload()" class="text-sm font-medium px-3 py-1.5 rounded-md border transition-colors" style="color:var(--ink-soft); border-color:var(--line);" onmouseover="this.style.color='var(--ink)';this.style.borderColor='var(--line-strong)'" onmouseout="this.style.color='var(--ink-soft)';this.style.borderColor='var(--line)'">
+            <i class="fa-solid fa-rotate-right mr-1"></i> Reset
+        </a>
+    </header>
+
+    <main class="flex-grow p-8 max-w-7xl mx-auto w-full flex flex-col gap-6">
+
+        <!-- Tabs Navigation: styled as physical filing tabs -->
+        <div class="flex items-end gap-1" style="border-bottom:2px solid var(--ink);">
+            <button id="tab-gstr1" onclick="switchTab('GSTR-1')" class="filing-tab active-g1 py-2.5 px-6 font-semibold rounded-t-lg border border-b-0 flex items-center gap-2" style="background:var(--card); border-color:var(--ink); color:var(--g1); transform:translateY(2px);">
+                <i class="fa-solid fa-arrow-up-from-bracket text-xs"></i> GSTR-1 <span class="text-[10px] font-mono-num font-normal opacity-70">Outward</span>
+            </button>
+            <button id="tab-gstr3b" onclick="switchTab('GSTR-3B')" class="filing-tab py-2.5 px-6 font-semibold rounded-t-lg border border-b-0 border-transparent flex items-center gap-2" style="color:var(--ink-soft);">
+                <i class="fa-solid fa-receipt text-xs"></i> GSTR-3B <span class="text-[10px] font-mono-num font-normal opacity-70">Summary</span>
+            </button>
+        </div>
+        
+        <div id="dropzone" class="dropzone stub-edge rounded-2xl pt-10 pb-6 flex flex-col items-center justify-center text-center cursor-pointer relative overflow-hidden border-2 border-dashed" style="background:var(--card); border-color:var(--line-strong);">
+            <input type="file" id="fileInput" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" accept="application/pdf" multiple>
+
+            <div id="dropzoneIcon" class="w-16 h-16 rounded-full flex items-center justify-center mb-4" style="background:var(--accent-soft); color:var(--accent);">
+                <i class="fa-solid fa-cloud-arrow-up text-2xl"></i>
+            </div>
+            <h3 class="font-display text-lg font-semibold mb-1" id="dropzoneTitle" style="color:var(--ink);">Click or drag GSTR-1 PDFs here</h3>
+            <p class="text-sm mb-5" style="color:var(--ink-soft);">Supports single or multiple PDF files — parsed entirely in your browser.</p>
+            <span class="text-xs font-mono-num font-medium px-3 py-1 rounded-full border" style="color:var(--ink-soft); border-color:var(--line); background:var(--paper);">
+                PDF FORMAT ONLY
+            </span>
+        </div>
+
+        <div id="loadingArea" class="hidden rounded-2xl p-6 border" style="background:var(--card); border-color:var(--line);">
+            <div class="flex justify-between items-center mb-2">
+                <span class="text-sm font-semibold flex items-center gap-2" id="loadingText" style="color:var(--ink);"><i class="fa-solid fa-magnifying-glass fa-fw" style="color:var(--accent);"></i> Processing files...</span>
+                <span class="text-sm font-bold font-mono-num" id="loadingPercent" style="color:var(--accent);">0%</span>
+            </div>
+            <div class="w-full rounded-full h-2 overflow-hidden" style="background:var(--paper);">
+                <div id="progressBar" class="h-2 rounded-full transition-all duration-300 ease-out" style="width: 0%; background:var(--accent);"></div>
+            </div>
+        </div>
+
+        <div id="resultsArea" class="hidden flex-col gap-4 h-full">
+            <div class="flex justify-between items-end">
+                <div>
+                    <h2 class="font-display text-lg font-bold" style="color:var(--ink);">Extracted Data</h2>
+                    <p class="text-sm" style="color:var(--ink-soft);">Only rows with values greater than ₹0.00 are shown.</p>
+                </div>
+                <div class="flex items-center gap-3">
+                    <button onclick="copyToExcel()" class="text-white px-5 py-2 rounded-lg font-medium shadow-sm transition-colors flex items-center gap-2" style="background:var(--ink);" onmouseover="this.style.opacity=0.88" onmouseout="this.style.opacity=1">
+                        <i class="fa-regular fa-copy"></i> Copy to Excel
+                    </button>
+                    <button onclick="exportToCSV()" class="px-5 py-2 rounded-lg font-medium shadow-sm transition-colors flex items-center gap-2 text-white" style="background:var(--accent);" onmouseover="this.style.opacity=0.88" onmouseout="this.style.opacity=1">
+                        <i class="fa-solid fa-file-csv"></i> Export CSV
+                    </button>
+                </div>
+            </div>
+
+            <div id="auditArea" class="rounded-2xl overflow-hidden mb-2 hidden border" style="background:var(--card); border-color:var(--line);">
+                <div class="px-6 py-4 border-b flex justify-between items-center" style="border-color:var(--line); background:var(--paper);">
+                    <h3 class="font-display font-bold flex items-center" style="color:var(--ink);"><i class="fa-solid fa-shield-halved mr-2" style="color:var(--g1);"></i> Audit Check <span class="font-normal ml-2 text-sm" style="color:var(--ink-soft);">— Computed vs Declared Liability</span></h3>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-sm whitespace-nowrap">
+                        <thead style="background:var(--paper); color:var(--ink-soft); border-bottom:1px solid var(--line);">
+                            <tr>
+                                <th class="px-6 py-3 font-semibold">File Name</th>
+                                <th class="px-6 py-3 font-semibold text-right">Computed Liability (₹)</th>
+                                <th class="px-6 py-3 font-semibold text-right">Declared Liability (₹)</th>
+                                <th class="px-6 py-3 font-semibold text-center">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="auditBody" class="divide-y" style="color:var(--ink); divide-color:var(--line);">
+                            <!-- Audit rows populated dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="rounded-2xl overflow-hidden flex-grow flex flex-col border" style="background:var(--card); border-color:var(--line);">
+                <div class="overflow-x-auto flex-grow">
+                    <table class="w-full text-left text-sm whitespace-nowrap">
+                        <thead class="sticky top-0" style="background:var(--paper); color:var(--ink-soft); border-bottom:1px solid var(--line);">
+                            <tr>
+                                <th class="px-4 py-3 font-semibold">File Name</th>
+                                <th class="px-4 py-3 font-semibold">Month</th>
+                                <th class="px-4 py-3 font-semibold">State/City</th>
+                                <th class="px-4 py-3 font-semibold">Section</th>
+                                <th class="px-4 py-3 font-semibold">Row Label</th>
+                                <th class="px-4 py-3 font-semibold text-right">Value (₹)</th>
+                                <th class="px-4 py-3 font-semibold text-right">IGST (₹)</th>
+                                <th class="px-4 py-3 font-semibold text-right">CGST (₹)</th>
+                                <th class="px-4 py-3 font-semibold text-right">SGST (₹)</th>
+                                <th class="px-4 py-3 font-semibold text-right">Cess (₹)</th>
+                                <th class="px-4 py-3 font-semibold text-center">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tableBody" class="divide-y" style="color:var(--ink); divide-color:var(--line);">
+                            <!-- Rows dynamically populated -->
+                        </tbody>
+                    </table>
+                </div>
+                <div id="emptyState" class="hidden p-8 text-center" style="color:var(--ink-soft);">
+                    <i class="fa-solid fa-box-open text-3xl mb-2" style="color:var(--line-strong);"></i>
+                    <p>No valid data found in the selected documents.</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // Global variables
+        let activeTab = 'GSTR-1';
+        let dataStore = {
+            'GSTR-1': [],
+            'GSTR-3B': []
+        };
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+
+        // Global dictionaries for cross-tab metadata lookup
+        const stateCodes = {
+            "01": "Jammu & Kashmir", "02": "Himachal Pradesh", "03": "Punjab", "04": "Chandigarh", "05": "Uttarakhand", 
+            "06": "Haryana", "07": "Delhi", "08": "Rajasthan", "09": "Uttar Pradesh", "10": "Bihar", "11": "Sikkim", 
+            "12": "Arunachal Pradesh", "13": "Nagaland", "14": "Manipur", "15": "Mizoram", "16": "Tripura", "17": "Meghalaya", 
+            "18": "Assam", "19": "West Bengal", "20": "Jharkhand", "21": "Odisha", "22": "Chhattisgarh", "23": "Madhya Pradesh", 
+            "24": "Gujarat", "25": "Daman & Diu", "26": "Dadra & Nagar Haveli", "27": "Maharashtra", "29": "Karnataka", 
+            "30": "Goa", "31": "Lakshadweep", "32": "Kerala", "33": "Tamil Nadu", "34": "Puducherry", "35": "Andaman & Nicobar", 
+            "36": "Telangana", "37": "Andhra Pradesh", "38": "Ladakh"
+        };
+
+        const monthMap = {
+            'january': {num: '01', off: 1}, 'february': {num: '02', off: 1}, 'march': {num: '03', off: 1},
+            'april': {num: '04', off: 0}, 'may': {num: '05', off: 0}, 'june': {num: '06', off: 0},
+            'july': {num: '07', off: 0}, 'august': {num: '08', off: 0}, 'september': {num: '09', off: 0},
+            'october': {num: '10', off: 0}, 'november': {num: '11', off: 0}, 'december': {num: '12', off: 0}
+        };
+
+        // Custom Toast Notification System (replaces alert)
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            
+            let style = type === 'error' ? 'background:var(--danger-soft); border-color:#F1C6C3; color:var(--danger);' :
+                        type === 'success' ? 'background:var(--success-soft); border-color:#BFE3D0; color:var(--success);' :
+                        'background:var(--accent-soft); border-color:var(--line-strong); color:var(--ink);';
+
+            let icon = type === 'error' ? 'fa-circle-exclamation' : 
+                       type === 'success' ? 'fa-circle-check' : 'fa-circle-info';
+
+            toast.className = 'toast border px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 font-medium text-sm';
+            toast.setAttribute('style', style);
+            toast.innerHTML = `<i class="fa-solid ${icon} text-lg"></i> <span>${message}</span>`;
+            
+            container.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.style.animation = 'fadeOut 0.3s ease-out forwards';
+                setTimeout(() => toast.remove(), 300);
+            }, 4000);
+        }
+
+        const dropzone = document.getElementById('dropzone');
+        const fileInput = document.getElementById('fileInput');
+
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropzone.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) { e.preventDefault(); e.stopPropagation(); }
+
+        function switchTab(tab) {
+            activeTab = tab;
+            const isG1 = tab === 'GSTR-1';
+            const accent = isG1 ? '#0F6E5E' : '#9C5A18';
+            const accentSoft = isG1 ? '#E4F2EE' : '#FBF0E2';
+
+            // Set the shared accent CSS variables so every accent-driven element follows the active form
+            document.documentElement.style.setProperty('--accent', accent);
+            document.documentElement.style.setProperty('--accent-soft', accentSoft);
+
+            // Update filing-tab styles (folder-tab look: active tab raised, joined to content)
+            const tabG1 = document.getElementById('tab-gstr1');
+            const tabG3b = document.getElementById('tab-gstr3b');
+            const activeTabStyle = `background:var(--card); border-color:var(--ink); color:${accent}; transform:translateY(2px);`;
+            const inactiveTabStyle = `color:var(--ink-soft);`;
+
+            tabG1.className = 'filing-tab py-2.5 px-6 font-semibold rounded-t-lg border border-b-0 flex items-center gap-2' + (isG1 ? '' : ' border-transparent');
+            tabG1.setAttribute('style', isG1 ? activeTabStyle : inactiveTabStyle);
+            tabG3b.className = 'filing-tab py-2.5 px-6 font-semibold rounded-t-lg border border-b-0 flex items-center gap-2' + (isG1 ? ' border-transparent' : '');
+            tabG3b.setAttribute('style', isG1 ? inactiveTabStyle : activeTabStyle);
+
+            // Update seal + dropzone icon to match the active form's accent
+            const seal = document.getElementById('headerSeal');
+            seal.style.borderColor = accent;
+            seal.style.color = accent;
+            seal.innerHTML = isG1 ? '<i class="fa-solid fa-arrow-up-from-bracket text-lg"></i>' : '<i class="fa-solid fa-receipt text-lg"></i>';
+
+            const dzIcon = document.getElementById('dropzoneIcon');
+            dzIcon.style.background = accentSoft;
+            dzIcon.style.color = accent;
+
+            // Update texts
+            document.getElementById('dropzoneTitle').innerText = `Click or drag ${tab} PDFs here`;
+            document.getElementById('headerSubtitle').innerText = `${tab} · Auto-detects & filters non-zero value rows`;
+            
+            // Re-render table to show data for the selected tab (or show dropzone if empty)
+            renderTable();
+        }
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropzone.addEventListener(eventName, () => dropzone.classList.add('dragover'), false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropzone.addEventListener(eventName, () => dropzone.classList.remove('dragover'), false);
+        });
+
+        dropzone.addEventListener('drop', (e) => {
+            if(e.dataTransfer.files.length > 0) handleFiles(e.dataTransfer.files);
+        });
+        
+        fileInput.addEventListener('change', (e) => {
+            if(e.target.files.length > 0) handleFiles(e.target.files);
+        });
+
+        async function handleFiles(files) {
+            const validFiles = Array.from(files).filter(f => f.type === 'application/pdf');
+            if (validFiles.length === 0) {
+                showToast('Please upload valid PDF files only.', 'error');
+                return;
+            }
+
+            document.getElementById('loadingArea').classList.remove('hidden');
+            document.getElementById('resultsArea').classList.add('hidden');
+            document.getElementById('dropzone').classList.add('hidden');
+            
+            dataStore[activeTab] = [];
+            
+            for (let i = 0; i < validFiles.length; i++) {
+                const file = validFiles[i];
+                
+                // Update Progress UI
+                const percent = Math.round((i / validFiles.length) * 100);
+                document.getElementById('progressBar').style.width = `${percent}%`;
+                document.getElementById('loadingPercent').innerText = `${percent}%`;
+                document.getElementById('loadingText').innerText = `Scanning: ${file.name}`;
+                
+                try {
+                    let fileData = [];
+                    if (activeTab === 'GSTR-1') {
+                        fileData = await processGSTR1(file);
+                    } else {
+                        fileData = await processGSTR3B(file);
+                    }
+                    dataStore[activeTab] = dataStore[activeTab].concat(fileData);
+                } catch (error) {
+                    console.error("Error processing " + file.name, error);
+                    showToast(`Failed to read ${file.name}`, 'error');
+                }
+            }
+
+            // Finalize Progress
+            document.getElementById('progressBar').style.width = `100%`;
+            document.getElementById('loadingPercent').innerText = `100%`;
+            setTimeout(() => {
+                document.getElementById('loadingArea').classList.add('hidden');
+                renderTable();
+                showToast(`${activeTab} Extraction complete!`, 'success');
+            }, 500);
+        }
+
+        // Parses the buffered raw lines belonging to Table 6.1 (Payment of Tax).
+        // GST portal PDFs render this table with very narrow cells, so both labels and
+        // individual numbers wrap unpredictably across physical text-lines - e.g. a whole
+        // row's data can sit on one line right after "Central", while "tax" (the second word
+        // of the label) lands on the NEXT line together with the leftover digits of every
+        // number that got cut short on the line above (e.g. "Central 357960.0 ... 342506.0
+        // 0.00 0.00" followed by "tax 0 0 0"). Stray watermark text (e.g. "FILED") can also
+        // sit on its own line in between. Rather than depend on line boundaries or adjacency,
+        // we flatten the whole section into one token stream and repair it in two passes:
+        // first reconstruct any decimal that got cut short, then walk the tokens using each
+        // label's first word alone ("Integrated" / "Central" / "State/" / "Cess") as the row
+        // delimiter - everything else that isn't a full number or a "-" is simply ignored.
+        //
+        // Each row always has 10 cells in a fixed order:
+        // 0 TaxPayable, 1 Adjustment, 2 NetTaxPayable,
+        // 3 ITC-Integrated, 4 ITC-Central, 5 ITC-State/UT, 6 ITC-Cess,
+        // 7 CashPaid, 8 Interest, 9 LateFee
+        // A "-" cell is kept as 0 so column position (and therefore meaning) is preserved.
+        function processTable61(rawLines, table61Data) {
+            let combined = rawLines.join(' ').replace(/\s+/g, ' ').trim();
+            if (!combined) return;
+
+            const idxA = combined.search(/\(A\)\s*Other than/i);
+            const idxB = combined.search(/\(B\)\s*Reverse charge/i);
+
+            let partA = '', partB = '';
+            if (idxA !== -1 && idxB !== -1) {
+                partA = combined.slice(idxA, idxB);
+                partB = combined.slice(idxB);
+            } else if (idxA !== -1) {
+                partA = combined.slice(idxA);
+            } else if (idxB !== -1) {
+                partB = combined.slice(idxB);
+            } else {
+                // No explicit (A)/(B) markers picked up; assume everything is subsection A.
+                partA = combined;
+            }
+
+            // Reconstructs numbers that a narrow PDF cell chopped mid-decimal, wherever the
+            // leftover digits landed. This table never has a bare integer column - every real
+            // value is either "-" or "X.YY" - so any standalone 1-2 digit token we encounter
+            // can only be a leftover fragment, and is applied to the OLDEST still-incomplete
+            // number (a FIFO queue), which is what "same relative order, different line" wraps
+            // to.
+            const repairTokens = (tokens) => {
+                const out = [];
+                const pending = []; // { idx, needed } - needed = digits still missing
+
+                for (const tok of tokens) {
+                    if (/^-?[\d,]+\.\d{2}$/.test(tok)) { out.push(tok); continue; }
+
+                    let m = tok.match(/^(-?[\d,]+\.\d)$/); // one fraction digit short
+                    if (m) { out.push(m[1]); pending.push({ idx: out.length - 1, needed: 1 }); continue; }
+
+                    m = tok.match(/^(-?[\d,]+\.)$/); // bare dot, two fraction digits short
+                    if (m) { out.push(m[1]); pending.push({ idx: out.length - 1, needed: 2 }); continue; }
+
+                    if (/^\d{1,2}$/.test(tok) && pending.length > 0) {
+                        const job = pending[0];
+                        if (tok.length >= job.needed) {
+                            out[job.idx] += tok.slice(0, job.needed);
+                            pending.shift();
+                        } else {
+                            out[job.idx] += tok;
+                            job.needed -= tok.length;
+                        }
+                        continue;
+                    }
+
+                    out.push(tok); // label word, dash, or anything else - pass through
+                }
+                return out;
+            };
+
+            // Returns { igst: [10 cols], cgst: [...], sgst: [...], cess: [...] } for one subsection
+            const parseSubsection = (text) => {
+                const rows = { igst: null, cgst: null, sgst: null, cess: null };
+                if (!text) return rows;
+
+                const tokens = repairTokens(text.split(' ').filter(Boolean));
+                let currentHead = '';
+                let buffer = [];
+
+                const flush = () => {
+                    if (currentHead && buffer.length > 0) {
+                        rows[currentHead] = buffer;
+                    }
+                    currentHead = '';
+                    buffer = [];
+                };
+
+                for (const tok of tokens) {
+                    // A row always starts with the first word of its label. The second word
+                    // ("tax") is NOT required here - it frequently wraps onto a separate line
+                    // away from its own label, so we don't gate on it.
+                    let headHere = '';
+                    if (/^Integrated$/i.test(tok)) headHere = 'igst';
+                    else if (/^Central$/i.test(tok)) headHere = 'cgst';
+                    else if (/^State\/?$/i.test(tok)) headHere = 'sgst';
+                    else if (/^Cess$/i.test(tok)) headHere = 'cess';
+
+                    if (headHere) {
+                        flush();
+                        currentHead = headHere;
+                        continue;
+                    }
+
+                    if (currentHead) {
+                        if (/^-?[\d,]+\.\d{2}$/.test(tok)) {
+                            buffer.push(parseFloat(tok.replace(/,/g, '')));
+                        } else if (tok === '-') {
+                            buffer.push(0); // keep the placeholder so column position isn't lost
+                        }
+                        // anything else ("tax", "UT", "FILED", ...) is a stray label word - ignored
+                    }
+                }
+                flush();
+                return rows;
+            };
+
+            const rowsA = parseSubsection(partA);
+            const rowsB = parseSubsection(partB);
+
+            // col(): safely read a column by index. Every row should have exactly 10 cells
+            // (dashes are kept as 0 placeholders); if a row doesn't match that shape, treat
+            // it as unreadable rather than guess at a possibly-wrong position.
+            const col = (row, idx) => {
+                if (!row || row.length !== 10) return 0;
+                return row[idx] || 0;
+            };
+
+            const heads = ['igst', 'cgst', 'sgst', 'cess'];
+
+            // ITC utilized: sum DOWN each input-credit column across all four liability rows,
+            // combining Regular + RCM (RCM legally carries no ITC, so this only adds real data).
+            for (const inputType of heads) {
+                const itcColIdx = { igst: 3, cgst: 4, sgst: 5, cess: 6 }[inputType];
+                let total = 0;
+                for (const h of heads) {
+                    total += col(rowsA[h], itcColIdx);
+                    total += col(rowsB[h], itcColIdx);
+                }
+                table61Data.itc_utilized[inputType] += Math.round(total * 100) / 100;
+            }
+
+            // Cash / Interest / Late fee: read directly per OUTPUT liability row, keeping
+            // Regular (A) and Reverse Charge (B) separate rather than merging them.
+            for (const h of heads) {
+                table61Data.cash_regular[h] += col(rowsA[h], 7);
+                table61Data.cash_rcm[h] += col(rowsB[h], 7);
+                table61Data.interest_regular[h] += col(rowsA[h], 8);
+                table61Data.interest_rcm[h] += col(rowsB[h], 8);
+                table61Data.late_fee_regular[h] += col(rowsA[h], 9);
+                table61Data.late_fee_rcm[h] += col(rowsB[h], 9);
+            }
+        }
+
+        async function processGSTR3B(file) {
+            const arrayBuffer = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({data: arrayBuffer}).promise;
+            let fileResults = [];
+            
+            let currentSection = "General Summary";
+            let currentFY = null;
+            let currentMonthStr = "";
+            let derivedMonth = "-";
+            let derivedState = "-";
+
+            // Specialized accumulator for Table 6.1
+            let table61Data = {
+                itc_utilized: { igst: 0, cgst: 0, sgst: 0, cess: 0 },
+                cash_regular: { igst: 0, cgst: 0, sgst: 0, cess: 0 },
+                cash_rcm: { igst: 0, cgst: 0, sgst: 0, cess: 0 },
+                interest_regular: { igst: 0, cgst: 0, sgst: 0, cess: 0 },
+                interest_rcm: { igst: 0, cgst: 0, sgst: 0, cess: 0 },
+                late_fee_regular: { igst: 0, cgst: 0, sgst: 0, cess: 0 },
+                late_fee_rcm: { igst: 0, cgst: 0, sgst: 0, cess: 0 }
+            };
+            // Table 6.1 gets heavily wrapped in narrow PDF cells (even single numbers and
+            // labels split across several physical lines), so instead of parsing it line-by-line
+            // we buffer its raw lines and parse them as one flattened block once the section ends.
+            let table61RawLines = [];
+            let inTable61 = false;
+
+            for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+                const page = await pdf.getPage(pageNum);
+                const textContent = await page.getTextContent();
+                
+                const yGroups = {};
+                for (let item of textContent.items) {
+                    const y = Math.round(item.transform[5] / 4) * 4; 
+                    if (!yGroups[y]) yGroups[y] = [];
+                    yGroups[y].push(item);
+                }
+                
+                const yKeys = Object.keys(yGroups).map(Number).sort((a,b) => b - a);
+                const lines = [];
+                for (const y of yKeys) {
+                    const rowItems = yGroups[y].sort((a,b) => a.transform[4] - b.transform[4]);
+                    lines.push(rowItems.map(item => item.str).join(' ').replace(/\s+/g, ' ').trim());
+                }
+                
+                for (let line of lines) {
+                    // Fix PDF kerning issues where decimals are separated by spaces (e.g. "1617828.  00")
+                    let cleanLine = line.replace(/([\d,]+)\.\s+(\d{2})\b/g, '$1.$2');
+
+                    // 1. Extract Metadata
+                    let fyMatch = cleanLine.match(/Year\s*(\d{4})-(\d{2})/i);
+                    if (fyMatch) currentFY = { y1: fyMatch[1].substring(2), y2: fyMatch[2] };
+                    
+                    let monthMatch = cleanLine.match(/Period\s*([A-Za-z]+)/i);
+                    if (monthMatch) currentMonthStr = monthMatch[1].toLowerCase();
+
+                    let gstinMatch = cleanLine.match(/GSTIN[^\d]*(\d{2})[A-Z0-9]{13}/i);
+                    if (gstinMatch) derivedState = stateCodes[gstinMatch[1]] || gstinMatch[1];
+                    
+                    if (currentFY && currentMonthStr && derivedMonth === "-") {
+                        let mData = monthMap[currentMonthStr];
+                        if (mData) {
+                            let yy = mData.off === 1 ? currentFY.y2 : currentFY.y1;
+                            derivedMonth = `${yy}-${mData.num}`;
+                        }
+                    }
+
+                    // 2. Identify Section (Removed strict ^ anchor to allow for leading spaces in PDF text)
+                    if (/3\.1\s+Details of Outward/i.test(cleanLine)) currentSection = 'Outward Supplies (3.1)';
+                    else if (/3\.1\.1\s+Details of Supplies/i.test(cleanLine)) currentSection = 'Supplies u/s 9(5) (3.1.1)';
+                    else if (/3\.2\s+Out of supplies/i.test(cleanLine)) currentSection = 'Inter-State Supplies (3.2)';
+                    else if (/4\.\s*Eligible ITC/i.test(cleanLine)) currentSection = 'Eligible ITC (4)';
+                    else if (/5\s+Values of exempt/i.test(cleanLine)) currentSection = 'Exempt/Nil-rated (5)';
+                    else if (/5\.1\s+Interest/i.test(cleanLine)) currentSection = 'Interest & Late Fee (5.1)';
+                    else if (/6\.\s*1\s*Payment/i.test(cleanLine) || /Payment\s+of\s+tax\b/i.test(cleanLine)) currentSection = 'Payment of Tax (6.1)';
+                    else if (/Breakup of tax liability/i.test(cleanLine)) currentSection = 'Liability Breakup';
+
+                    // Table 6.1: buffer raw lines instead of parsing inline (see note above),
+                    // and flush+parse the buffer the moment we leave the section.
+                    if (currentSection === 'Payment of Tax (6.1)') {
+                        inTable61 = true;
+                        table61RawLines.push(cleanLine);
+                        continue;
+                    } else if (inTable61) {
+                        processTable61(table61RawLines, table61Data);
+                        table61RawLines = [];
+                        inTable61 = false;
+                    }
+
+                    // 3. Extract Values
+                    let words = cleanLine.split(/\s+/);
+                    let monetaryValues = [];
+                    let labelWords = [];
+                    
+                    for (let word of words) {
+                        // Loosen the regex slightly to catch numbers that might have lost their comma 
+                        // or have slight spacing issues due to PDF kerning.
+                        if (/^-?[\d,]+\.\d{2}$/.test(word) || /^-?\d+\.\d{2}$/.test(word)) {
+                            monetaryValues.push(word);
+                        } else {
+                            labelWords.push(word);
+                        }
+                    }
+
+                    if (monetaryValues.length > 0) {
+                        let parsedValues = monetaryValues.map(n => parseFloat(n.replace(/,/g, '')));
+                        let sum = parsedValues.reduce((a,b) => a + b, 0);
+                        
+                        // Ignore zero-value rows
+                        if (Math.abs(sum) > 0) {
+                            let label = labelWords.join(' ');
+                            
+                            // Remove ugly PDF list markers like "(a)", "(1)", "(ii)" to keep labels clean
+                            label = label.replace(/^[a-z]\)\s*/i, '').replace(/^\(\w+\)\s*/i, '').trim(); 
+                            if (label === "" || /^[\d\-]+$/.test(label)) label = "Row Data";
+
+                            // Column Alignment Magic
+                            if (currentSection === 'Eligible ITC (4)' || currentSection === 'Interest & Late Fee (5.1)' || currentSection === 'Liability Breakup') {
+                                parsedValues.unshift(0); 
+                            }
+
+                            fileResults.push({
+                                fileName: file.name,
+                                month: derivedMonth,
+                                city: derivedState,
+                                section: currentSection,
+                                label: label,
+                                values: parsedValues
+                            });
+                        }
+                    }
+                }
+            }
+
+            // Catch a table 6.1 that runs to the very end of the document with no trailing section marker
+            if (inTable61 && table61RawLines.length) {
+                processTable61(table61RawLines, table61Data);
+                table61RawLines = [];
+                inTable61 = false;
+            }
+
+            // After processing all pages, push the beautifully summarized Table 6.1 rows!
+            const addSummaryRow = (label, dataObj) => {
+                const sum = dataObj.igst + dataObj.cgst + dataObj.sgst + dataObj.cess;
+                if (Math.abs(sum) > 0.01) {
+                    fileResults.push({
+                        fileName: file.name,
+                        month: derivedMonth,
+                        city: derivedState,
+                        section: 'Payment of Tax (6.1)',
+                        label: label,
+                        values: [0, dataObj.igst, dataObj.cgst, dataObj.sgst, dataObj.cess]
+                    });
+                }
+            };
+
+            addSummaryRow('ITC Utilized (by input credit: IGST/CGST/SGST)', table61Data.itc_utilized);
+            addSummaryRow('Tax Paid in Cash - Regular', table61Data.cash_regular);
+            addSummaryRow('Tax Paid in Cash - Reverse Charge (RCM)', table61Data.cash_rcm);
+            addSummaryRow('Interest Paid in Cash - Regular', table61Data.interest_regular);
+            addSummaryRow('Interest Paid in Cash - Reverse Charge (RCM)', table61Data.interest_rcm);
+            addSummaryRow('Late Fee Paid in Cash - Regular', table61Data.late_fee_regular);
+            addSummaryRow('Late Fee Paid in Cash - Reverse Charge (RCM)', table61Data.late_fee_rcm);
+
+            return fileResults;
+        }
+
+        async function processGSTR1(file) {
+            const arrayBuffer = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({data: arrayBuffer}).promise;
+            let fileResults = [];
+            
+            let currentSection = "General Summary";
+            let currentFY = null;
+            let currentMonthStr = "";
+            let derivedMonth = "-";
+            let derivedState = "-";
+
+            // Matches numbers like "4A - ", "11A(1) - ", "Total Liability"
+            const sectionHeaderRegex = /^(?:[1-9][A-C]?(?:\(\d\))?|1[0-5][A-C]?(?:\(\d\))?)\s*-?\s*[A-Z]|Total Liability/i;
+
+            for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+                const page = await pdf.getPage(pageNum);
+                const textContent = await page.getTextContent();
+                
+                // Reconstruct lines based on Y-coordinates
+                const yGroups = {};
+                for (let item of textContent.items) {
+                    // Grouping threshold to handle slight vertical misalignments in PDF text layers
+                    const y = Math.round(item.transform[5] / 4) * 4; 
+                    if (!yGroups[y]) yGroups[y] = [];
+                    yGroups[y].push(item);
+                }
+                
+                // Sort Y descending (top of page to bottom)
+                const yKeys = Object.keys(yGroups).map(Number).sort((a,b) => b - a);
+                const lines = [];
+                for (const y of yKeys) {
+                    // Sort X ascending (left to right)
+                    const rowItems = yGroups[y].sort((a,b) => a.transform[4] - b.transform[4]);
+                    // Combine into single string line
+                    lines.push(rowItems.map(item => item.str).join(' ').replace(/\s+/g, ' ').trim());
+                }
+                
+                // Evaluate each line
+                for (let line of lines) {
+                    
+                    // --- META DATA EXTRACTION (Month & State) ---
+                    let fyMatch = line.match(/Financial year\s*(\d{4})-(\d{2})/i);
+                    if (fyMatch) currentFY = { y1: fyMatch[1].substring(2), y2: fyMatch[2] };
+                    
+                    let monthMatch = line.match(/Tax period\s*([A-Za-z]+)/i);
+                    if (monthMatch) currentMonthStr = monthMatch[1].toLowerCase();
+
+                    let gstinMatch = line.match(/GSTIN\s*(\d{2})[A-Z0-9]{13}/i);
+                    if (gstinMatch) derivedState = stateCodes[gstinMatch[1]] || gstinMatch[1];
+                    
+                    if (currentFY && currentMonthStr && derivedMonth === "-") {
+                        let mData = monthMap[currentMonthStr];
+                        if (mData) {
+                            // If month is Jan-Mar, use second half of FY, otherwise first half
+                            let yy = mData.off === 1 ? currentFY.y2 : currentFY.y1;
+                            derivedMonth = `${yy}-${mData.num}`;
+                        }
+                    }
+
+                    // 1. Is this a new section header?
+                    if (sectionHeaderRegex.test(line)) {
+                        let rawSection = line.substring(0, 100); // Truncate extremely long headers
+                        
+                        // Apply custom mapping for cleaner section names
+                        if (/^4A\s*-/i.test(rawSection)) {
+                            currentSection = 'B2B';
+                        } else if (/^7\s*-/i.test(rawSection)) {
+                            currentSection = 'B2C';
+                        } else if (/^12\s*-/i.test(rawSection)) {
+                            currentSection = 'HSN';
+                        } else if (/^14\s*-/i.test(rawSection)) {
+                            currentSection = 'ECO';
+                        } else if (/^9B\s*-/i.test(rawSection)) {
+                            currentSection = 'Credit/Debit Notes (9B)';
+                        } else if (/Total Liability/i.test(rawSection)) {
+                            currentSection = 'Total Liability';
+                        } else {
+                            currentSection = rawSection;
+                        }
+                    }
+                    
+                    // 2. Extract monetary values from the line
+                    // Splitting by space is safer than global regex to avoid overlapping index issues
+                    let words = line.split(/\s+/);
+                    let monetaryValues = [];
+                    let labelWords = [];
+                    
+                    for (let word of words) {
+                        // Check if word strictly matches Indian currency format ending in .XX (including negative values)
+                        if (/^-?[\d,]+\.\d{2}$/.test(word)) {
+                            monetaryValues.push(word);
+                        } else {
+                            labelWords.push(word);
+                        }
+                    }
+                    
+                    // 3. If monetary values exist, check if the sum is not zero (handles negative debit/credit notes)
+                    if (monetaryValues.length > 0) {
+                        let parsedValues = monetaryValues.map(n => parseFloat(n.replace(/,/g, '')));
+                        let sum = parsedValues.reduce((a,b) => a + b, 0);
+                        
+                        if (Math.abs(sum) > 0) {
+                            // Format the label neatly
+                            let label = labelWords.join(' ');
+                            
+                            // Cleanup common GSTR specific garbage in labels (like "Total 2 Invoice")
+                            label = label.replace(/^Total\s+\d+\s+(Invoice|Note|Net Value|Document|All Documents)?/, 'Total ');
+                            label = label.trim();
+                            if (label === "" || /^[\d\-]+$/.test(label)) label = "Row Data";
+
+                            // Skip aggregate Total rows for sections that have splits (ECO, HSN, Credit/Debit Notes)
+                            let skipRow = false;
+                            if ((currentSection === 'ECO' || currentSection === 'HSN') && /^Total/i.test(label) && !/B2B|B2C/i.test(label)) {
+                                skipRow = true;
+                            }
+                            if (currentSection === 'Credit/Debit Notes (9B)' && /Total\s*-\s*Net\s*off\s*debit\/credit\s*notes/i.test(label)) {
+                                skipRow = true;
+                            }
+
+                            if (!skipRow) {
+                                fileResults.push({
+                                    fileName: file.name,
+                                    month: derivedMonth,
+                                    city: derivedState,
+                                    section: currentSection,
+                                    label: label,
+                                    values: parsedValues
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+            return fileResults;
+        }
+
+        function renderTable() {
+            const currentData = dataStore[activeTab];
+            const tbody = document.getElementById('tableBody');
+            const emptyState = document.getElementById('emptyState');
+            const auditArea = document.getElementById('auditArea');
+            const auditBody = document.getElementById('auditBody');
+            const dropzone = document.getElementById('dropzone');
+            
+            tbody.innerHTML = '';
+            auditBody.innerHTML = '';
+
+            if (currentData.length === 0) {
+                document.getElementById('resultsArea').classList.add('hidden');
+                dropzone.classList.remove('hidden');
+                return;
+            } else {
+                dropzone.classList.add('hidden');
+                document.getElementById('resultsArea').classList.remove('hidden');
+                emptyState.classList.add('hidden');
+            }
+
+            // Number formatter
+            const formatCurrency = (num) => {
+                if (num === undefined || num === null) return '-';
+                return num.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            };
+
+            // Process Audit Check Data
+            const uniqueFiles = [...new Set(currentData.map(d => d.fileName))];
+
+            // Shared row renderer for the audit table (used by both GSTR-1 and GSTR-3B checks)
+            const renderAuditRow = (labelText, computedVal, declaredVal) => {
+                computedVal = Math.round(computedVal * 100) / 100;
+                const declaredValRounded = Math.round(declaredVal * 100) / 100;
+
+                // Allow a small ₹2 rounding tolerance
+                const diff = Math.abs(computedVal - declaredValRounded);
+                const isMatch = diff <= 2.0;
+
+                const tr = document.createElement('tr');
+                tr.className = 'transition-colors';
+                tr.onmouseover = () => tr.style.background = 'var(--paper)';
+                tr.onmouseout = () => tr.style.background = 'transparent';
+                tr.innerHTML = `
+                    <td class="px-6 py-3 text-sm font-medium" style="color:var(--ink);">${labelText}</td>
+                    <td class="px-6 py-3 text-sm font-semibold font-mono-num text-right" style="color:var(--ink);">${formatCurrency(computedVal)}</td>
+                    <td class="px-6 py-3 text-sm font-semibold font-mono-num text-right" style="color:${isMatch ? 'var(--ink)' : 'var(--danger)'};">${formatCurrency(declaredValRounded)}</td>
+                    <td class="px-6 py-3 text-sm text-center">
+                        ${isMatch 
+                            ? `<span class="px-3 py-1 rounded-full text-xs font-bold" style="background:var(--success-soft); color:var(--success);"><i class="fa-solid fa-check mr-1"></i> MATCH</span>`
+                            : `<span class="px-3 py-1 rounded-full text-xs font-bold font-mono-num" style="background:var(--danger-soft); color:var(--danger);"><i class="fa-solid fa-xmark mr-1"></i> MISMATCH (Diff: ₹${formatCurrency(diff)})</span>`
+                        }
+                    </td>
+                `;
+                auditBody.appendChild(tr);
+            };
+
+            if (uniqueFiles.length > 0 && activeTab === 'GSTR-1') {
+                auditArea.classList.remove('hidden');
+                
+                uniqueFiles.forEach(fileName => {
+                    const fileData = currentData.filter(d => d.fileName === fileName);
+                    
+                    // Find Declared Liability
+                    const liabilityRow = fileData.find(d => d.section === 'Total Liability');
+                    const declaredVal = liabilityRow ? liabilityRow.values[0] : 0;
+
+                    // Compute Liability by summing relevant sections
+                    let computedVal = 0;
+                    fileData.forEach(row => {
+                        if (row.section === 'B2B' || row.section === 'B2C' || row.section === 'Credit/Debit Notes (9B)' || row.section === 'ECO') {
+                            computedVal += (row.values[0] || 0);
+                        }
+                    });
+
+                    renderAuditRow(fileName, computedVal, declaredVal);
+                });
+            } else if (uniqueFiles.length > 0 && activeTab === 'GSTR-3B') {
+                auditArea.classList.remove('hidden');
+
+                // Reconciles Table 3.1 (self-assessed outward tax + RCM inward liability, both of
+                // which the taxpayer computes themselves) against the "Breakup of tax liability
+                // declared (for interest computation)" figure the same PDF declares - by rule these
+                // should tie out; a mismatch is exactly what would trigger interest under Sec 50.
+                const headsGSTR3B = [
+                    { label: 'IGST', idx: 1 },
+                    { label: 'CGST', idx: 2 },
+                    { label: 'SGST', idx: 3 },
+                    { label: 'Cess', idx: 4 }
+                ];
+
+                uniqueFiles.forEach(fileName => {
+                    const fileData = currentData.filter(d => d.fileName === fileName);
+
+                    const liabilityRow = fileData.find(d => d.section === 'Liability Breakup');
+                    if (!liabilityRow) return; // nothing declared in this file to audit against
+
+                    headsGSTR3B.forEach(h => {
+                        const declaredVal = liabilityRow.values[h.idx] || 0;
+
+                        let computedVal = 0;
+                        fileData.forEach(row => {
+                            if (row.section === 'Outward Supplies (3.1)' || row.section === 'Supplies u/s 9(5) (3.1.1)') {
+                                computedVal += (row.values[h.idx] || 0);
+                            }
+                        });
+
+                        const roundedComputed = Math.round(computedVal * 100) / 100;
+                        const roundedDeclared = Math.round(declaredVal * 100) / 100;
+                        if (roundedComputed === 0 && roundedDeclared === 0) return; // skip empty heads (e.g. Cess)
+
+                        renderAuditRow(`${fileName} — ${h.label}`, computedVal, declaredVal);
+                    });
+                });
+            } else {
+                auditArea.classList.add('hidden');
+            }
+
+            // Track duplicates by creating a unique signature for the file, section, and all 5 values
+            const duplicateTracker = {};
+            currentData.forEach(row => {
+                let v = row.values || [];
+                const sig = `${row.fileName}|${row.section}|${v[0]}|${v[1]}|${v[2]}|${v[3]}|${v[4]}`;
+                duplicateTracker[sig] = (duplicateTracker[sig] || 0) + 1;
+            });
+
+            currentData.forEach((row, index) => {
+                const tr = document.createElement('tr');
+                
+                // Ensure we map values correctly. Usually 5 values: Value, IGST, CGST, SGST, Cess. 
+                // If fewer exist, pad with nulls.
+                let v = row.values || [];
+
+                // Check if this row's signature appears more than once
+                const sig = `${row.fileName}|${row.section}|${v[0]}|${v[1]}|${v[2]}|${v[3]}|${v[4]}`;
+            const isDuplicate = duplicateTracker[sig] > 1;
+
+            // Apply warning colors if duplicate
+            tr.className = 'transition-colors';
+                tr.setAttribute('style', isDuplicate ? 'background:var(--warn-soft);' : '');
+                tr.onmouseover = () => { if (!isDuplicate) tr.style.background = 'var(--paper)'; };
+                tr.onmouseout = () => { if (!isDuplicate) tr.style.background = 'transparent'; };
+
+                const inkColor = isDuplicate ? 'var(--warn)' : 'var(--ink)';
+                const softColor = isDuplicate ? 'var(--warn)' : 'var(--ink-soft)';
+
+                // Add a duplicate badge to the section name if flagged
+                const sectionContent = isDuplicate 
+                    ? `${row.section} <span class="ml-2 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider" style="color:#7A4E0A; background:#F3DDAA;" title="Duplicate row detected in this file"><i class="fa-solid fa-triangle-exclamation mr-1"></i> Duplicate</span>`
+                    : row.section;
+                
+                tr.innerHTML = `
+                    <td class="px-4 py-3 text-xs font-medium max-w-[150px] truncate" style="color:var(--ink-soft);" title="${row.fileName}">${row.fileName}</td>
+                    <td class="px-4 py-3 text-sm font-mono-num" style="color:${softColor};">${row.month}</td>
+                    <td class="px-4 py-3 text-sm max-w-[120px] truncate" style="color:${softColor};" title="${row.city}">${row.city}</td>
+                    <td class="px-4 py-3 text-sm font-medium max-w-[250px] truncate" style="color:${inkColor};" title="${row.section}">${sectionContent}</td>
+                    <td class="px-4 py-3 text-sm max-w-[200px] truncate" style="color:${softColor};" title="${row.label}">${row.label}</td>
+                    <td class="px-4 py-3 text-sm font-semibold font-mono-num text-right" style="color:${inkColor};">${formatCurrency(v[0])}</td>
+                    <td class="px-4 py-3 text-sm font-mono-num text-right" style="color:${softColor};">${formatCurrency(v[1])}</td>
+                    <td class="px-4 py-3 text-sm font-mono-num text-right" style="color:${softColor};">${formatCurrency(v[2])}</td>
+                    <td class="px-4 py-3 text-sm font-mono-num text-right" style="color:${softColor};">${formatCurrency(v[3])}</td>
+                    <td class="px-4 py-3 text-sm font-mono-num text-right" style="color:${softColor};">${formatCurrency(v[4])}</td>
+                    <td class="px-4 py-3 text-center">
+                        <button onclick="deleteRow(${index})" class="p-1.5 rounded-md transition-all" style="color:var(--line-strong);" onmouseover="this.style.color='var(--danger)';this.style.background='var(--danger-soft)'" onmouseout="this.style.color='var(--line-strong)';this.style.background='transparent'" title="Delete Row">
+                            <i class="fa-solid fa-trash-can"></i>
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function exportToCSV() {
+            const currentData = dataStore[activeTab];
+            if (currentData.length === 0) {
+                showToast('No data available to export.', 'error');
+                return;
+            }
+
+            let csvContent = "File Name,Month,State/City,Section,Row Label,Value (Rs),IGST (Rs),CGST (Rs),SGST (Rs),Cess (Rs)\n";
+
+            currentData.forEach(row => {
+                const escapeCSV = (str) => `"${String(str).replace(/"/g, '""')}"`;
+                
+                let v = row.values;
+                let val = v[0] !== undefined ? v[0] : 0;
+                let igst = v[1] !== undefined ? v[1] : 0;
+                let cgst = v[2] !== undefined ? v[2] : 0;
+                let sgst = v[3] !== undefined ? v[3] : 0;
+                let cess = v[4] !== undefined ? v[4] : 0;
+
+                csvContent += `${escapeCSV(row.fileName)},${escapeCSV(row.month)},${escapeCSV(row.city)},${escapeCSV(row.section)},${escapeCSV(row.label)},${val},${igst},${cgst},${sgst},${cess}\n`;
+            });
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            link.setAttribute("href", url);
+            link.setAttribute("download", `GSTR1_Extracted_${new Date().getTime()}.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        function copyToExcel() {
+            const currentData = dataStore[activeTab];
+            if (currentData.length === 0) {
+                showToast('No data available to copy.', 'error');
+                return;
+            }
+
+            // Create Tab-Separated Values (TSV) for perfect pasting into Excel
+            let tsvContent = "File Name\tMonth\tState/City\tSection\tRow Label\tValue (Rs)\tIGST (Rs)\tCGST (Rs)\tSGST (Rs)\tCess (Rs)\n";
+
+            currentData.forEach(row => {
+                let v = row.values || [];
+                let val = v[0] !== undefined ? v[0] : 0;
+                let igst = v[1] !== undefined ? v[1] : 0;
+                let cgst = v[2] !== undefined ? v[2] : 0;
+                let sgst = v[3] !== undefined ? v[3] : 0;
+                let cess = v[4] !== undefined ? v[4] : 0;
+
+                // Clean strings to prevent unexpected line breaks or tabs in the output
+                const cleanStr = (str) => String(str).replace(/\t|\n/g, ' ');
+                
+                tsvContent += `${cleanStr(row.fileName)}\t${cleanStr(row.month)}\t${cleanStr(row.city)}\t${cleanStr(row.section)}\t${cleanStr(row.label)}\t${val}\t${igst}\t${cgst}\t${sgst}\t${cess}\n`;
+            });
+
+            // Use an invisible textarea to copy data safely within browser constraints
+            const textArea = document.createElement("textarea");
+            textArea.value = tsvContent;
+            
+            // Prevent scrolling to the bottom of the page
+            textArea.style.top = "0";
+            textArea.style.left = "0";
+            textArea.style.position = "fixed";
+
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+
+            try {
+                const successful = document.execCommand('copy');
+                if (successful) {
+                    showToast('Copied to clipboard! You can now paste (Ctrl+V) directly into Excel.', 'success');
+                } else {
+                    showToast('Failed to copy. Please use Export CSV instead.', 'error');
+                }
+            } catch (err) {
+                console.error('Fallback: Oops, unable to copy', err);
+                showToast('Error copying data.', 'error');
+            }
+
+            document.body.removeChild(textArea);
+        }
+
+        function deleteRow(index) {
+            // Remove the row from the active tab data array
+            dataStore[activeTab].splice(index, 1);
+            
+            // Re-render the table, which automatically recalculates the audit check
+            renderTable();
+            
+            // Show notification
+            showToast('Row deleted and audit recalculated.', 'info');
+        }
+    </script>
+</body>
+</html>
